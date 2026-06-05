@@ -6,6 +6,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
 const PORT = process.env.PORT || 3000
 
+// Health check (no auth)
+app.get('/health', (req, res) => res.send('ok'))
+
 // Basic Auth middleware
 const SITE_USER = process.env.SITE_USER || 'admin'
 const SITE_PASS = process.env.SITE_PASS || 'pixeloffice'
