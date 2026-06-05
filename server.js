@@ -34,6 +34,52 @@ app.use((req, res, next) => {
   res.set('WWW-Authenticate', 'Basic realm="Pixel Office"')
   res.status(401).send('Invalid credentials')
 })
+app.use(express.json())
+
+// Proxy Notion pages
+app.post('/api/notion/pages', async (req, res) => {
+  const key = process.env.VITE_NOTION_API_KEY || process.env.NOTION_API_KEY
+  if (!key) return res.status(500).json({ error: 'Notion API key not configured on server' })
+  try {
+    const response = await fetch('https://api.notion.com/v1/pages', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${key}`,
+        'Content-Type': 'application/json',
+        'Notion-Version': '2022-06-28',
+      },
+      body: JSON.stringify(req.body),
+    })
+    const data = await response.json()
+    res.status(response.status).json(data)
+  } catch (err) {
+    console.error('[Proxy] Notion page write error:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// Proxy Notion database query
+app.post('/api/notion/databases/:id/query', async (req, res) => {
+  const key = process.env.VITE_NOTION_API_KEY || process.env.NOTION_API_KEY
+  const { id } = req.params
+  if (!key) return res.status(500).json({ error: 'Notion API key not configured on server' })
+  try {
+    const response = await fetch(`https://api.notion.com/v1/databases/${id}/query`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${key}`,
+        'Content-Type': 'application/json',
+        'Notion-Version': '2022-06-28',
+      },
+      body: JSON.stringify(req.body),
+    })
+    const data = await response.json()
+    res.status(response.status).json(data)
+  } catch (err) {
+    console.error('[Proxy] Notion db query error:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
 
 // Serve static files from dist
 app.use(express.static(path.join(__dirname, 'dist')))

@@ -1,15 +1,12 @@
 // ── Finance Service — Bean CFO ────────────────────────────────────
 // บันทึกทุกค่าใช้จ่ายลง Notion Finance Ledger
 
-const NOTION_KEY = import.meta.env.VITE_NOTION_API_KEY
 const FINANCE_DB = '0c1477ded338419bb19a0ea239d758fd'
-const BASE       = 'https://api.notion.com/v1'
+const BASE       = '/api/notion'
 const USD_TO_THB = 35
 
 const hdrs = () => ({
-  'Authorization':  `Bearer ${NOTION_KEY}`,
   'Content-Type':   'application/json',
-  'Notion-Version': '2022-06-28',
 })
 
 // ── Category map ─────────────────────────────────────────────────
@@ -32,7 +29,7 @@ export async function logExpense({
   sessionId = '',
   notes = '',
 }) {
-  if (!NOTION_KEY || !usd || usd <= 0) return
+  if (!usd || usd <= 0) return
 
   const notionCategory = CATEGORY_MAP[category] ?? 'Other'
   const thb = Math.round(usd * USD_TO_THB * 100) / 100
@@ -65,7 +62,6 @@ export async function logExpense({
 
 // ── ดึงสรุปรายจ่ายจาก Notion ─────────────────────────────────────
 export async function getFinanceSummary(project = null) {
-  if (!NOTION_KEY) return null
   try {
     const body = {
       sorts:     [{ timestamp: 'created_time', direction: 'descending' }],

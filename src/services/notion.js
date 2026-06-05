@@ -1,16 +1,12 @@
 // ── Notion Service — Agent Logs ───────────────────────────────────
-const KEY    = import.meta.env.VITE_NOTION_API_KEY
 const DB_ID  = import.meta.env.VITE_NOTION_DATABASE_ID || '4b58c4384a6148bf9894f91f602129ea'
-const BASE   = 'https://api.notion.com/v1'
+const BASE   = '/api/notion'
 const hdrs   = () => ({
-  'Authorization':  `Bearer ${KEY}`,
   'Content-Type':   'application/json',
-  'Notion-Version': '2022-06-28',
 })
 
 // ── บันทึกงานที่เสร็จลง Notion ───────────────────────────────────
 export async function logTask({ agentName, task, skillsUsed, resultSummary, status = 'completed', sessionId }) {
-  if (!KEY) return
   try {
     await fetch(`${BASE}/pages`, {
       method:  'POST',
@@ -36,7 +32,6 @@ export async function logTask({ agentName, task, skillsUsed, resultSummary, stat
 
 // ── ดึง log ล่าสุด (ของ agent คนเดียว หรือทั้งทีม) ──────────────
 export async function getRecentLogs({ agentName = null, limit = 5 } = {}) {
-  if (!KEY) return []
   try {
     const body = {
       sorts:     [{ timestamp: 'created_time', direction: 'descending' }],
