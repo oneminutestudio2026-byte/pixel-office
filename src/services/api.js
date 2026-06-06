@@ -74,59 +74,79 @@ async function callProvider(agent, messages, systemPrompt, tools = null) {
   const provider = agent.provider ?? 'anthropic'
   const model = agent.model
 
-  switch (provider) {
-    case 'openai': {
-      const apiKey = import.meta.env.VITE_OPENAI_API_KEY
-      if (!apiKey) throw new Error('กรุณาตั้งค่า VITE_OPENAI_API_KEY ใน .env')
-      return callOpenAICompatible({
-        baseUrl: 'https://api.openai.com/v1',
-        apiKey, model, systemPrompt, messages,
-      })
-    }
+  try {
+    switch (provider) {
+      case 'openai': {
+        const apiKey = import.meta.env.VITE_OPENAI_API_KEY
+        if (!apiKey) throw new Error('กรุณาตั้งค่า VITE_OPENAI_API_KEY ใน .env')
+        const res = await callOpenAICompatible({
+          baseUrl: 'https://api.openai.com/v1',
+          apiKey, model, systemPrompt, messages,
+        })
+        return { ...res, actualModel: model, actualProvider: provider }
+      }
 
-    case 'deepseek': {
-      const apiKey = import.meta.env.VITE_DEEPSEEK_API_KEY
-      if (!apiKey) throw new Error('กรุณาตั้งค่า VITE_DEEPSEEK_API_KEY ใน .env')
-      return callOpenAICompatible({
-        baseUrl: 'https://api.deepseek.com',
-        apiKey, model, systemPrompt, messages,
-      })
-    }
+      case 'deepseek': {
+        const apiKey = import.meta.env.VITE_DEEPSEEK_API_KEY
+        if (!apiKey) throw new Error('กรุณาตั้งค่า VITE_DEEPSEEK_API_KEY ใน .env')
+        const res = await callOpenAICompatible({
+          baseUrl: 'https://api.deepseek.com',
+          apiKey, model, systemPrompt, messages,
+        })
+        return { ...res, actualModel: model, actualProvider: provider }
+      }
 
-    case 'gemini':
-      return callGemini({ model, systemPrompt, messages })
+      case 'gemini': {
+        const res = await callGemini({ model, systemPrompt, messages })
+        return { ...res, actualModel: model, actualProvider: provider }
+      }
 
-    case 'anthropic':
-    default: {
-      const response = await anthropic.messages.create({
-        model,
-        max_tokens: 1024,
-        system: systemPrompt,
-        messages,
-        ...(tools ? { tools } : {}),
-      })
+      case 'anthropic':
+      default: {
+        const response = await anthropic.messages.create({
+          model,
+          max_tokens: 1024,
+          system: systemPrompt,
+          messages,
+          ...(tools ? { tools } : {}),
+        })
 
-      // Handle tool use (Violet image gen)
-      if (response.stop_reason === 'tool_use') {
-        const toolBlock = response.content.find(b => b.type === 'tool_use')
-        if (toolBlock?.name === 'generate_image') {
-          const imageUrl = await generateImage(toolBlock.input.prompt)
-          return {
-            type: 'image',
-            imageUrl,
-            text: toolBlock.input.caption || 'สร้างภาพเสร็จแล้วค่ะ',
-            inputTokens: response.usage?.input_tokens ?? 0,
-            outputTokens: response.usage?.output_tokens ?? 0,
+        // Handle tool use (Violet image gen)
+        if (response.stop_reason === 'tool_use') {
+          const toolBlock = response.content.find(b => b.type === 'tool_use')
+          if (toolBlock?.name === 'generate_image') {
+            const imageUrl = await generateImage(toolBlock.input.prompt)
+            return {
+              type: 'image',
+              imageUrl,
+              text: toolBlock.input.caption || 'สร้างภาพเสร็จแล้วค่ะ',
+              inputTokens: response.usage?.input_tokens ?? 0,
+              outputTokens: response.usage?.output_tokens ?? 0,
+              actualModel: model,
+              actualProvider: provider,
+            }
           }
         }
-      }
 
-      return {
-        text: response.content[0].text,
-        inputTokens: response.usage?.input_tokens ?? 0,
-        outputTokens: response.usage?.output_tokens ?? 0,
+        return {
+          text: response.content[0].text,
+          inputTokens: response.usage?.input_tokens ?? 0,
+          outputTokens: response.usage?.output_tokens ?? 0,
+          actualModel: model,
+          actualProvider: provider,
+        }
       }
     }
+  } catch (err) {
+    if (provider !== 'anthropic') {
+      console.warn(`Provider ${provider} (${model}) failed: ${err.message}. Falling back to Anthropic...`)
+      const fallbackModel = (agent.id === 'ace' || model === 'gpt-5' || model === 'gpt-4o')
+        ? 'claude-sonnet-4-5'
+        : 'claude-haiku-4-5-20251001'
+      const fallbackAgent = { ...agent, provider: 'anthropic', model: fallbackModel }
+      return callProvider(fallbackAgent, messages, systemPrompt, tools)
+    }
+    throw err
   }
 }
 
@@ -203,16 +223,19 @@ export async function callAgent(agent, history, extraSystemContext = '') {
     canDrawImages ? [GENERATE_IMAGE_TOOL] : null,
   )
 
+  const usedModel = result.actualModel || agent.model
+  const usedProvider = result.actualProvider || agent.provider || 'anthropic'
+
   // Handle image response from Violet
   if (result.type === 'image') {
-    const usd = calcTokenCost(agent.model, result.inputTokens, result.outputTokens)
-    recordCost({ category: `${agent.provider ?? 'anthropic'}-api`, agentName: agent.name, description: agent.model, usd })
+    const usd = calcTokenCost(usedModel, result.inputTokens, result.outputTokens)
+    recordCost({ category: `${usedProvider}-api`, agentName: agent.name, description: usedModel, usd })
     return { type: 'image', imageUrl: result.imageUrl, content: result.text, prompt: '' }
   }
 
   // Record cost
-  const usd = calcTokenCost(agent.model, result.inputTokens, result.outputTokens)
-  recordCost({ category: `${agent.provider ?? 'anthropic'}-api`, agentName: agent.name, description: agent.model, usd })
+  const usd = calcTokenCost(usedModel, result.inputTokens, result.outputTokens)
+  recordCost({ category: `${usedProvider}-api`, agentName: agent.name, description: usedModel, usd })
 
   return result.text
 }

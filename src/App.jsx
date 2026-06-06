@@ -186,8 +186,25 @@ ${haanSummary ? `ห่านการเงินโปรเจค: $${haanSum
 
       // ── Sub-agents คุยกัน sequential (ประหยัด token) ──────────
       if (agentId === 'ace') {
-        const subIds = getOrchestratorFlow(text)
         const aceReplyText = typeof reply === 'string' ? reply : reply?.content ?? ''
+        
+        let subIds = []
+        const flowMatch = aceReplyText.match(/<flow>(.*?)<\/flow>/i)
+        if (flowMatch) {
+          subIds = flowMatch[1]
+            .split(',')
+            .map(s => s.trim().toLowerCase())
+            .filter(id => {
+              const a = getAgent(id)
+              return a && id !== 'ace'
+            })
+        }
+
+        if (subIds.length === 0) {
+          subIds = getOrchestratorFlow(text)
+        }
+
+        console.log('Orchestration Flow:', subIds)
 
         // runChain: เรียก agent ทีละคน ส่ง context สะสมไปด้วย
         const runChain = async () => {
