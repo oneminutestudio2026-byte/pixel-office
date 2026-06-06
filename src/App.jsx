@@ -532,12 +532,50 @@ ${haanSummary ? `ห่านการเงินโปรเจค: $${haanSum
       {/* ── Body: 40/60 layout ── */}
       <div className="flex flex-1 overflow-hidden min-h-0">
 
+        {/* Left Sidebar Navigation */}
+        <div className="hidden md:flex flex-col items-center justify-between py-6 w-16 shrink-0 bg-black/30 border border-white/5 rounded-3xl my-3 ml-3 backdrop-blur-lg shadow-2xl">
+          <div className="flex flex-col items-center gap-6">
+            {/* Home button */}
+            <button className="w-10 h-10 rounded-xl flex items-center justify-center bg-white/10 text-white shadow-md cursor-pointer transition-all hover:bg-white/15">
+              <span className="text-lg">🏠</span>
+            </button>
+            {/* Grid button */}
+            <button className="w-10 h-10 rounded-xl flex items-center justify-center text-white/50 hover:text-white hover:bg-white/5 transition-all cursor-pointer">
+              <span className="text-lg">🎛️</span>
+            </button>
+            {/* Document button */}
+            <button className="w-10 h-10 rounded-xl flex items-center justify-center text-white/50 hover:text-white hover:bg-white/5 transition-all cursor-pointer">
+              <span className="text-lg">📄</span>
+            </button>
+            {/* Messages button */}
+            <button className="w-10 h-10 rounded-xl flex items-center justify-center text-white/50 hover:text-white hover:bg-white/5 transition-all cursor-pointer">
+              <span className="text-lg">💬</span>
+            </button>
+            {/* Scan button */}
+            <button className="w-10 h-10 rounded-xl flex items-center justify-center text-white/50 hover:text-white hover:bg-white/5 transition-all cursor-pointer">
+              <span className="text-lg">🔍</span>
+            </button>
+          </div>
+          <div className="flex flex-col items-center gap-6">
+            {/* Settings button */}
+            <button className="w-10 h-10 rounded-xl flex items-center justify-center text-white/50 hover:text-white hover:bg-white/5 transition-all cursor-pointer">
+              <span className="text-lg">⚙️</span>
+            </button>
+            {/* Signout button */}
+            <button className="w-10 h-10 rounded-xl flex items-center justify-center text-white/50 hover:text-red-400 hover:bg-white/5 transition-all cursor-pointer">
+              <span className="text-lg">🚪</span>
+            </button>
+          </div>
+        </div>
+
         {/* Left: Office scene — ขยายเต็มเมื่อไม่มี chat */}
         <div className="flex flex-col h-full overflow-hidden transition-all duration-300"
           style={{ width: selectedAgent ? '40%' : '100%', minWidth: 0, flexShrink: 0 }}>
 
           {/* Office scene — takes remaining height */}
-          <div className="relative flex-1 overflow-hidden min-h-0">
+          <div
+            className={`relative flex-1 overflow-hidden min-h-0 mt-3 ml-3 mb-1.5 ${selectedAgent ? 'mr-1.5' : 'mr-3'} rounded-3xl border border-white/5 bg-black/25 backdrop-blur-md shadow-2xl`}
+          >
             <OfficeScene
               agentStates={agentStates}
               selectedAgent={selectedAgent}
@@ -566,38 +604,37 @@ ${haanSummary ? `ห่านการเงินโปรเจค: $${haanSum
 
           {/* Agent status bar — fixed at bottom of left panel */}
           <div
-            className="shrink-0 px-2 py-2 overflow-y-auto"
+            className={`shrink-0 ml-3 mb-3 mt-1.5 ${selectedAgent ? 'mr-1.5' : 'mr-3'} rounded-3xl border border-white/5 bg-black/25 backdrop-blur-md shadow-2xl p-4 overflow-y-auto`}
             style={{
-              background: 'rgba(10,4,1,0.85)',
-              borderTop: '1px solid rgba(210,140,50,0.18)',
               maxHeight: '38%',
             }}
           >
-            <div className="text-xs font-bold mb-1.5 flex items-center gap-1.5 px-1"
-              style={{ color: 'rgba(210,140,50,0.7)' }}>
-              <span>🔀</span> ทีมงาน
+            <div className="text-xs font-bold mb-2.5 flex items-center gap-1.5 px-1"
+              style={{ color: 'rgba(253,230,138,0.7)' }}>
+              <span>🔀</span> ทีมงาน (Agent Status)
             </div>
-            <div className="flex flex-col gap-1">
+            <div className="flex flex-wrap gap-2">
               {AGENTS.filter(a => a.id !== 'ace').map(agent => {
                 const state = agentStates[agent.id] || 'idle'
                 const stateColor = { idle: '#6B7280', thinking: '#F59E0B', typing: '#3B82F6', done: '#10B981' }
                 const stateLabel = { idle: 'Idle', thinking: 'คิด…', typing: 'ตอบ…', done: 'เสร็จ ✓' }
+                const isAgentActive = selectedAgent === agent.id
                 return (
                   <button
                     key={agent.id}
                     onClick={() => handleCharacterClick(agent.id)}
-                    className="flex items-center gap-2 px-2 py-1 rounded-lg transition-all hover:opacity-90 active:scale-95 text-left w-full"
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-full transition-all hover:scale-105 active:scale-95 text-left cursor-pointer"
                     style={{
-                      background: selectedAgent === agent.id ? `${agent.color}30` : 'rgba(255,255,255,0.05)',
-                      border: `1px solid ${selectedAgent === agent.id ? agent.color + '60' : 'rgba(255,255,255,0.06)'}`,
+                      background: isAgentActive ? `${agent.color}35` : 'rgba(255,255,255,0.04)',
+                      border: `1px solid ${isAgentActive ? agent.color + '70' : 'rgba(255,255,255,0.06)'}`,
                     }}
                   >
-                    <span className={`w-2 h-2 rounded-full flex-shrink-0 ${state !== 'idle' ? 'animate-pulse' : ''}`}
+                    <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${state !== 'idle' ? 'animate-pulse' : ''}`}
                       style={{ background: stateColor[state] }}/>
-                    <span className="font-semibold text-xs flex-1 truncate" style={{ color: agent.color }}>
+                    <span className="font-bold text-xs truncate" style={{ color: agent.color }}>
                       {agent.name}
                     </span>
-                    <span className="text-xs shrink-0" style={{ color: stateColor[state], fontSize: '10px' }}>
+                    <span className="text-[10px] shrink-0" style={{ color: stateColor[state] }}>
                       {stateLabel[state]}
                     </span>
                   </button>
@@ -614,50 +651,49 @@ ${haanSummary ? `ห่านการเงินโปรเจค: $${haanSum
           style={{
             width: selectedAgent ? '60%' : '0%',
             minWidth: 0,
-            borderLeft: selectedAgent ? '1px solid rgba(255, 255, 255, 0.06)' : 'none',
-            background: 'rgba(12, 15, 12, 0.45)',
-            backdropFilter: 'blur(16px)',
           }}
         >
-          <AnimatePresence mode="wait">
-            {selectedAgent ? (
-              <motion.div
-                key={selectedAgent}
-                className="h-full w-full"
-                initial={{ opacity: 0, x: 18 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -18 }}
-                transition={{ duration: 0.18, ease: 'easeOut' }}
-              >
-                <ChatPanel
-                  agentId={selectedAgent}
-                  agentStates={agentStates}
-                  messages={messages}
-                  loadingHistory={loadingHistory[selectedAgent]}
-                  onClearMemory={handleClearMemory}
-                  onSend={(agentId, text) => {
-                    if (agentId === 'nova') {
-                      handleVideoGeneration(text)
-                    } else {
-                      handleSend(agentId, text)
-                    }
-                  }}
-                  onClose={handleClose}
-                />
-              </motion.div>
-            ) : (
-              <motion.div
-                key="placeholder"
-                className="h-full w-full"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.15 }}
-              >
-                <ChatPlaceholder onSelect={handleCharacterClick}/>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          <div className="flex flex-col h-full overflow-hidden my-3 mr-3 ml-1.5 rounded-3xl border border-white/5 bg-black/25 backdrop-blur-md shadow-2xl">
+            <AnimatePresence mode="wait">
+              {selectedAgent ? (
+                <motion.div
+                  key={selectedAgent}
+                  className="h-full w-full"
+                  initial={{ opacity: 0, x: 18 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -18 }}
+                  transition={{ duration: 0.18, ease: 'easeOut' }}
+                >
+                  <ChatPanel
+                    agentId={selectedAgent}
+                    agentStates={agentStates}
+                    messages={messages}
+                    loadingHistory={loadingHistory[selectedAgent]}
+                    onClearMemory={handleClearMemory}
+                    onSend={(agentId, text) => {
+                      if (agentId === 'nova') {
+                        handleVideoGeneration(text)
+                      } else {
+                        handleSend(agentId, text)
+                      }
+                    }}
+                    onClose={handleClose}
+                  />
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="placeholder"
+                  className="h-full w-full"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.15 }}
+                >
+                  <ChatPlaceholder onSelect={handleCharacterClick}/>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
 
       </div>

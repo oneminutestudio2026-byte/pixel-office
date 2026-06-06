@@ -8,7 +8,7 @@ const stateVariants = {
   done:     { scale: [1,1.18,0.95,1.05,1], transition: { duration: 0.7, times: [0,0.3,0.6,0.8,1] } },
 }
 
-export default function Character({ agent, state, isSelected, onClick, taskText }) {
+export default function Character({ agent, state, isSelected, onClick, taskText, flowIndex }) {
   return (
     <div
       className="flex flex-col items-center cursor-pointer select-none group relative"
@@ -45,6 +45,14 @@ export default function Character({ agent, state, isSelected, onClick, taskText 
                 transform: 'translateX(-50%) rotate(45deg)',
               }}
             />
+            {flowIndex !== null && flowIndex !== undefined && (
+              <span
+                className="absolute -top-2 -right-2 w-5 h-5 flex items-center justify-center rounded-full text-white text-[10px] font-black bg-emerald-500 border border-white/20 shadow-md"
+                style={{ zIndex: 12 }}
+              >
+                {flowIndex}
+              </span>
+            )}
             <span>{taskText}</span>
           </motion.div>
         )}

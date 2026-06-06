@@ -13,7 +13,7 @@ function depthScale(sceneY) {
 }
 
 // ── Responsive character overlay ─────────────────────────────────
-function CharacterOverlay({ agents, agentStates, selectedAgent, onCharacterClick }) {
+function CharacterOverlay({ agents, agentStates, selectedAgent, onCharacterClick, activeFlow = [] }) {
   const containerRef = useRef(null)
   const [scale, setScale] = useState({ s: 1, ox: 0, oy: 0 })
 
@@ -41,6 +41,7 @@ function CharacterOverlay({ agents, agentStates, selectedAgent, onCharacterClick
         const sy = agent.sceneY * scale.s + scale.oy
         const state = agentStates[agent.id] || 'idle'
         const taskText = state !== 'idle' ? (agent.tasks?.[state] ?? null) : null
+        const flowIndex = activeFlow.includes(agent.id) ? activeFlow.indexOf(agent.id) + 1 : null
         // CSS 3D depth: ตัวละครหน้าโผล่ออกมาจากจอ, หลังอยู่ลึกลงไป
         const zFactor = Math.max(0, Math.min(1, (agent.sceneY - DEPTH_BACK) / (DEPTH_FRONT - DEPTH_BACK)))
         const zDepth  = zFactor * 45  // 0px (back) → 45px (front)
@@ -65,6 +66,7 @@ function CharacterOverlay({ agents, agentStates, selectedAgent, onCharacterClick
               isSelected={selectedAgent === agent.id}
               onClick={() => onCharacterClick(agent.id)}
               taskText={taskText}
+              flowIndex={flowIndex}
             />
           </div>
         )
@@ -416,7 +418,7 @@ export default function OfficeScene({ agentStates, selectedAgent, onCharacterCli
 
   return (
     <div className="relative w-full h-full overflow-hidden"
-      style={{ background: '#1A0A02', perspective: '1100px', perspectiveOrigin: '50% 10%' }}>
+      style={{ background: 'transparent', perspective: '1100px', perspectiveOrigin: '50% 10%' }}>
       {/* preserve-3d wrapper so translateZ on characters works */}
       <div style={{ width:'100%', height:'100%', position:'relative', transformStyle:'preserve-3d' }}>
       <svg
@@ -427,24 +429,24 @@ export default function OfficeScene({ agentStates, selectedAgent, onCharacterCli
       >
         <defs>
           <linearGradient id="ceiling-grad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%"   stopColor="#2A1A0A"/>
-            <stop offset="100%" stopColor="#3A2212"/>
+            <stop offset="0%"   stopColor="#2A1A0A" stopOpacity="0.45"/>
+            <stop offset="100%" stopColor="#3A2212" stopOpacity="0.65"/>
           </linearGradient>
           <linearGradient id="backwall-grad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%"   stopColor="#1A0C04"/>
-            <stop offset="100%" stopColor="#251408"/>
+            <stop offset="0%"   stopColor="#1A0C04" stopOpacity="0.35"/>
+            <stop offset="100%" stopColor="#251408" stopOpacity="0.55"/>
           </linearGradient>
           <linearGradient id="sidewall-l" x1="1" y1="0" x2="0" y2="0">
-            <stop offset="0%"   stopColor="#1E1006"/>
-            <stop offset="100%" stopColor="#0D0602"/>
+            <stop offset="0%"   stopColor="#1E1006" stopOpacity="0.45"/>
+            <stop offset="100%" stopColor="#0D0602" stopOpacity="0.65"/>
           </linearGradient>
           <linearGradient id="sidewall-r" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%"   stopColor="#1E1006"/>
-            <stop offset="100%" stopColor="#0D0602"/>
+            <stop offset="0%"   stopColor="#1E1006" stopOpacity="0.45"/>
+            <stop offset="100%" stopColor="#0D0602" stopOpacity="0.65"/>
           </linearGradient>
           <linearGradient id="floor-grad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%"   stopColor="#1E0E05"/>
-            <stop offset="100%" stopColor="#2D1A0A"/>
+            <stop offset="0%"   stopColor="#1E0E05" stopOpacity="0.6"/>
+            <stop offset="100%" stopColor="#2D1A0A" stopOpacity="0.8"/>
           </linearGradient>
           <radialGradient id="ambient-center" cx="50%" cy="52%" r="52%">
             <stop offset="0%"   stopColor="#FF7A00" stopOpacity="0.22"/>
@@ -678,6 +680,7 @@ export default function OfficeScene({ agentStates, selectedAgent, onCharacterCli
         agentStates={agentStates}
         selectedAgent={selectedAgent}
         onCharacterClick={onCharacterClick}
+        activeFlow={activeFlow}
       />
 
       {/* Room sign overlay */}
