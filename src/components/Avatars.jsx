@@ -426,9 +426,48 @@ const AVATAR_MAP = {
   tiger: CocoAvatar,
 }
 
+const IMAGE_AVATARS = {
+  puppy: '/avatars/charlie.png',
+  parrot: '/avatars/sonic.png',
+  tiger: '/avatars/coco.png',
+  hamster: '/avatars/bean.png',
+  fox: '/avatars/nova.png',
+}
+
 export default function AgentAvatar({ animal, state = 'idle', size }) {
-  const Component = AVATAR_MAP[animal] || AceAvatar
+  const imageUrl = IMAGE_AVATARS[animal]
   const w = size ?? 84
   const h = size != null ? Math.round(size * 108 / 84) : 108
+
+  if (imageUrl) {
+    return (
+      <div className="relative flex items-center justify-center shrink-0" style={{ width: w, height: h }}>
+        <img
+          src={imageUrl}
+          alt={animal}
+          className="rounded-2xl object-cover border border-white/10 shadow-md bg-neutral-950/20"
+          style={{ width: '92%', height: '92%' }}
+        />
+        {/* Thinking dots overlay */}
+        {state === 'thinking' && (
+          <div className="absolute top-1 right-1 bg-neutral-900/90 border border-amber-500/30 rounded-full px-1.5 py-0.5 shadow-md flex gap-0.5 z-10 scale-90 origin-top-right">
+            <span className="w-1 h-1 rounded-full bg-amber-400 animate-pulse"/>
+            <span className="w-1 h-1 rounded-full bg-amber-400 animate-pulse delay-75"/>
+            <span className="w-1 h-1 rounded-full bg-amber-400 animate-pulse delay-150"/>
+          </div>
+        )}
+        {/* Done checkmark overlay */}
+        {state === 'done' && (
+          <div className="absolute -top-1 -right-1 bg-emerald-500 border border-white/20 rounded-full w-5 h-5 flex items-center justify-center shadow-md z-10">
+            <svg viewBox="0 0 12 12" className="w-3 h-3 stroke-white fill-none stroke-[2]" strokeLinecap="round">
+              <path d="M2.5 6.5 L4.5 8.5 L9.5 3.5"/>
+            </svg>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  const Component = AVATAR_MAP[animal] || AceAvatar
   return <Component state={state} w={w} h={h} />
 }
