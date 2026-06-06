@@ -99,8 +99,9 @@ function MessageBubble({ msg }) {
 }
 
 // ── Main chat panel ───────────────────────────────────────────────
-export default function ChatPanel({ agentId, agentStates, messages, onSend, onClose }) {
+export default function ChatPanel({ agentId, agentStates, messages, loadingHistory, onClearMemory, onSend, onClose }) {
   const [input, setInput] = useState('')
+  const [clearing, setClearing] = useState(false)
   const messagesEndRef = useRef(null)
   const inputRef = useRef(null)
   const agent = getAgent(agentId)
@@ -111,7 +112,7 @@ export default function ChatPanel({ agentId, agentStates, messages, onSend, onCl
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages, agentId])
+  }, [messages, agentId, loadingHistory])
 
   useEffect(() => {
     inputRef.current?.focus()
@@ -129,6 +130,19 @@ export default function ChatPanel({ agentId, agentStates, messages, onSend, onCl
 
   function handleKey(e) {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() }
+  }
+
+  async function handleClearClick() {
+    if (isBusy || clearing) return
+    const ok = window.confirm(`คุณต้องการล้างความจำประวัติทั้งหมดของ ${agent.name} ใน Notion หรือไม่?`)
+    if (!ok) return
+
+    setClearing(true)
+    try {
+      await onClearMemory(agentId)
+    } finally {
+      setClearing(false)
+    }
   }
 
   return (
@@ -163,13 +177,23 @@ export default function ChatPanel({ agentId, agentStates, messages, onSend, onCl
           <div className="mt-1.5"><StatusBadge state={currentState}/></div>
         </div>
 
-        {/* Close */}
-        <button
-          onClick={onClose}
-          className="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-black/10 transition-colors shrink-0 text-lg leading-none"
-        >
-          ×
-        </button>
+        {/* Actions */}
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            onClick={handleClearClick}
+            disabled={isBusy || clearing}
+            title="ล้างความจำ (Clear Memory)"
+            className="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-black/10 transition-colors text-sm disabled:opacity-30 cursor-pointer"
+          >
+            {clearing ? '⏳' : '🗑️'}
+          </button>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-black/10 transition-colors text-lg leading-none cursor-pointer"
+          >
+            ×
+          </button>
+        </div>
       </div>
 
       {/* System note (Ace only) — compact */}
@@ -182,36 +206,45 @@ export default function ChatPanel({ agentId, agentStates, messages, onSend, onCl
 
       {/* ── Messages (only scrollable area) ── */}
       <div className="flex-1 overflow-y-auto px-3 py-3 min-h-0">
-        {agentMessages.length === 0 && (
-          <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} className="mt-2">
-            <MessageBubble msg={{ role: 'agent', content: agent.greeting }}/>
-          </motion.div>
+        {loadingHistory ? (
+          <div className="flex flex-col items-center justify-center py-12 gap-3 h-full">
+            <div className="w-8 h-8 rounded-full border-4 border-amber-900/10 animate-spin" style={{ borderTopColor: agent.color }} />
+            <p className="text-xs font-semibold text-gray-500">กำลังโหลดประวัติจาก Notion...</p>
+          </div>
+        ) : (
+          <>
+            {agentMessages.length === 0 && (
+              <motion.div initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} className="mt-2">
+                <MessageBubble msg={{ role: 'agent', content: agent.greeting }}/>
+              </motion.div>
+            )}
+
+            {agentMessages.map((msg, i) => (
+              <MessageBubble key={i} msg={msg}/>
+            ))}
+
+            {/* Typing indicator */}
+            <AnimatePresence>
+              {isBusy && (
+                <motion.div
+                  key="typing"
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 4 }}
+                  className="flex justify-start mb-2"
+                >
+                  <div className="px-4 py-3 rounded-2xl rounded-bl-sm bg-white border border-black/8 flex gap-1.5 items-center shadow-sm">
+                    <span className="w-2 h-2 rounded-full dot-1" style={{ background: agent.color }}/>
+                    <span className="w-2 h-2 rounded-full dot-2" style={{ background: agent.color }}/>
+                    <span className="w-2 h-2 rounded-full dot-3" style={{ background: agent.color }}/>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <div ref={messagesEndRef}/>
+          </>
         )}
-
-        {agentMessages.map((msg, i) => (
-          <MessageBubble key={i} msg={msg}/>
-        ))}
-
-        {/* Typing indicator */}
-        <AnimatePresence>
-          {isBusy && (
-            <motion.div
-              key="typing"
-              initial={{ opacity: 0, y: 4 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 4 }}
-              className="flex justify-start mb-2"
-            >
-              <div className="px-4 py-3 rounded-2xl rounded-bl-sm bg-white border border-black/8 flex gap-1.5 items-center shadow-sm">
-                <span className="w-2 h-2 rounded-full dot-1" style={{ background: agent.color }}/>
-                <span className="w-2 h-2 rounded-full dot-2" style={{ background: agent.color }}/>
-                <span className="w-2 h-2 rounded-full dot-3" style={{ background: agent.color }}/>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        <div ref={messagesEndRef}/>
       </div>
 
       {/* ── Quick-action chips ── */}

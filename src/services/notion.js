@@ -47,6 +47,7 @@ export async function getRecentLogs({ agentName = null, limit = 5 } = {}) {
     })
     const data = await res.json()
     return (data.results || []).map(p => ({
+      id:            p.id,
       agentName:     p.properties['Agent Name']?.rich_text?.[0]?.plain_text     ?? '',
       task:          p.properties['Task']?.rich_text?.[0]?.plain_text           ?? '',
       skillsUsed:    p.properties['Skills Used']?.rich_text?.[0]?.plain_text    ?? '',
@@ -57,6 +58,33 @@ export async function getRecentLogs({ agentName = null, limit = 5 } = {}) {
   } catch (e) {
     console.warn('[Notion] read error', e)
     return []
+  }
+}
+
+// ── ล้างประวัติใน Notion (Archive pages) ───────────────────────────
+export async function clearNotionLogs(agentName) {
+  try {
+    const body = {
+      filter: { property: 'Agent Name', rich_text: { contains: agentName } },
+      page_size: 100,
+    }
+    const res = await fetch(`${BASE}/databases/${DB_ID}/query`, {
+      method: 'POST',
+      headers: hdrs(),
+      body: JSON.stringify(body),
+    })
+    const data = await res.json()
+    const pages = data.results || []
+
+    await Promise.all(pages.map(p =>
+      fetch(`${BASE}/pages/${p.id}`, {
+        method: 'PATCH',
+        headers: hdrs(),
+        body: JSON.stringify({ archived: true }),
+      })
+    ))
+  } catch (e) {
+    console.warn('[Notion] clear error', e)
   }
 }
 

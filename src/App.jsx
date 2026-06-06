@@ -1,11 +1,11 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import OfficeScene from './components/OfficeScene'
 import ChatPanel from './components/ChatPanel'
 import AgentAvatar from './components/Avatars'
 import { AGENTS, getAgent } from './data/agents'
 import { callAgent, evaluateVideoQuality } from './services/api'
-import { logTask, getRecentLogs, buildUpskillContext } from './services/notion'
+import { logTask, getRecentLogs, buildUpskillContext, clearNotionLogs } from './services/notion'
 import { generateVideo, recordScore, getModelStats } from './services/videoService'
 import { sendContentPackage } from './services/telegramService'
 import { recordCost, getSummary, toBaht } from './services/costTracker'
@@ -111,6 +111,71 @@ export default function App() {
   const [messages, setMessages] = useState({})
   const messagesRef = useRef(messages)
   messagesRef.current = messages
+  const [loadingHistory, setLoadingHistory] = useState({})
+
+  const loadHistory = useCallback(async (agentId) => {
+    const agent = getAgent(agentId)
+    if (!agent) return
+
+    if (messagesRef.current[agentId] && messagesRef.current[agentId].length > 0) return
+
+    setLoadingHistory(prev => ({ ...prev, [agentId]: true }))
+    try {
+      const logs = await getRecentLogs({ agentName: agent.name, limit: 10 })
+      
+      const chatMessages = logs.reverse().flatMap(log => {
+        const msgs = []
+        if (log.task) {
+          msgs.push({ role: 'user', content: log.task, type: 'text' })
+        }
+        if (log.resultSummary) {
+          const imgMatch = log.resultSummary.match(/^\[IMAGE:\s*(https?:\/\/\S+)\]\s*([\s\S]*)$/)
+          if (imgMatch) {
+            msgs.push({
+              role: 'agent',
+              content: imgMatch[2] || 'สร้างภาพเสร็จแล้วค่ะ',
+              type: 'image',
+              imageUrl: imgMatch[1],
+            })
+          } else {
+            msgs.push({ role: 'agent', content: log.resultSummary, type: 'text' })
+          }
+        }
+        return msgs
+      })
+
+      setMessages(prev => ({
+        ...prev,
+        [agentId]: chatMessages,
+      }))
+    } catch (err) {
+      console.error('Failed to load history from Notion:', err)
+    } finally {
+      setLoadingHistory(prev => ({ ...prev, [agentId]: false }))
+    }
+  }, [])
+
+  useEffect(() => {
+    if (selectedAgent) {
+      loadHistory(selectedAgent)
+    }
+  }, [selectedAgent, loadHistory])
+
+  const handleClearMemory = useCallback(async (agentId) => {
+    const agent = getAgent(agentId)
+    if (!agent) return
+
+    try {
+      await clearNotionLogs(agent.name)
+      setMessages(prev => ({
+        ...prev,
+        [agentId]: [],
+      }))
+    } catch (err) {
+      console.error('Failed to clear memory in Notion:', err)
+    }
+  }, [])
+
   // sessionId: ใช้ระบุ session ใน Notion log
   const sessionId = useRef(`S-${Date.now().toString(36)}-${Math.random().toString(36).slice(2,5)}`).current
 
@@ -171,11 +236,15 @@ ${haanSummary ? `ห่านการเงินโปรเจค: $${haanSum
       }
 
       // ── Log งานลง Notion (fire & forget) ──────────────────────
+      const notionResultSummary = (typeof reply === 'object' && reply.type === 'image')
+        ? `[IMAGE: ${reply.imageUrl}] ${reply.content}`
+        : replyText;
+
       logTask({
         agentName: agent.name,
         task: text,
         skillsUsed: agent.role,
-        resultSummary: replyText,
+        resultSummary: notionResultSummary,
         status: 'completed',
         sessionId,
       })
@@ -243,11 +312,15 @@ ${haanSummary ? `ห่านการเงินโปรเจค: $${haanSum
               sharedContext += `\n${subAgent.name} (${subAgent.role}) บอกว่า: ${replyText}`
 
               // Log ลง Notion
+              const subNotionResult = (typeof subReply === 'object' && subReply.type === 'image')
+                ? `[IMAGE: ${subReply.imageUrl}] ${subReply.content}`
+                : replyText;
+
               logTask({
                 agentName: subAgent.name,
                 task: text,
                 skillsUsed: subAgent.role,
-                resultSummary: replyText,
+                resultSummary: subNotionResult,
                 status: 'completed',
                 sessionId,
               })
@@ -552,6 +625,8 @@ ${haanSummary ? `ห่านการเงินโปรเจค: $${haanSum
                   agentId={selectedAgent}
                   agentStates={agentStates}
                   messages={messages}
+                  loadingHistory={loadingHistory[selectedAgent]}
+                  onClearMemory={handleClearMemory}
                   onSend={(agentId, text) => {
                     if (agentId === 'nova') {
                       handleVideoGeneration(text)

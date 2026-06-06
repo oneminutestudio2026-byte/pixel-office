@@ -58,6 +58,29 @@ app.post('/api/notion/pages', async (req, res) => {
   }
 })
 
+// Proxy Notion page update (for archiving/deleting logs)
+app.patch('/api/notion/pages/:id', async (req, res) => {
+  const key = process.env.VITE_NOTION_API_KEY || process.env.NOTION_API_KEY
+  const { id } = req.params
+  if (!key) return res.status(500).json({ error: 'Notion API key not configured on server' })
+  try {
+    const response = await fetch(`https://api.notion.com/v1/pages/${id}`, {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `Bearer ${key}`,
+        'Content-Type': 'application/json',
+        'Notion-Version': '2022-06-28',
+      },
+      body: JSON.stringify(req.body),
+    })
+    const data = await response.json()
+    res.status(response.status).json(data)
+  } catch (err) {
+    console.error('[Proxy] Notion page update error:', err)
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // Proxy Notion database query
 app.post('/api/notion/databases/:id/query', async (req, res) => {
   const key = process.env.VITE_NOTION_API_KEY || process.env.NOTION_API_KEY
