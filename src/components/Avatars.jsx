@@ -427,10 +427,16 @@ const AVATAR_MAP = {
 }
 
 const IMAGE_AVATARS = {
+  dog: '/avatars/ace.png',
+  cat_pink: '/avatars/violet.png',
+  panda: '/avatars/mei.png',
+  cat_blue: '/avatars/luna.png',
+  cat_orange: '/avatars/leo.png',
+  bear: '/avatars/arlo.png',
   puppy: '/avatars/charlie.png',
-  parrot: '/avatars/sonic.png',
   tiger: '/avatars/coco.png',
   hamster: '/avatars/bean.png',
+  parrot: '/avatars/sonic.png',
   fox: '/avatars/nova.png',
 }
 
