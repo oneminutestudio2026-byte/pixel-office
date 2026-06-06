@@ -393,7 +393,7 @@ function WallTV({ cx, y, w, h }) {
 }
 
 // ── Main scene ────────────────────────────────────────────────────
-export default function OfficeScene({ agentStates, selectedAgent, onCharacterClick }) {
+export default function OfficeScene({ agentStates, selectedAgent, onCharacterClick, activeFlow = [] }) {
   // Room geometry (perspective projection, 900×580 viewBox)
   //   Back wall:   (95,90)→(805,290)
   //   Ceiling:     (0,58)→(900,58)→(805,90)→(95,90)
@@ -611,6 +611,41 @@ export default function OfficeScene({ agentStates, selectedAgent, onCharacterCli
         <Desk cx={450} cy={460} monitorColor="#92400E"/>
         {/* Coco – front right */}
         <Desk cx={648} cy={452} monitorColor="#7F1D1D"/>
+
+        {/* ── Active Workflow Connection Line ── */}
+        {activeFlow && activeFlow.length > 1 && (
+          <g filter="url(#bloom)">
+            <path
+              d={activeFlow.map((agentId, idx) => {
+                const agent = AGENTS.find(a => a.id === agentId);
+                if (!agent) return '';
+                return `${idx === 0 ? 'M' : 'L'} ${agent.sceneX} ${agent.sceneY - 10}`;
+              }).join(' ')}
+              fill="none"
+              stroke="#F59E0B"
+              strokeWidth="2.5"
+              strokeDasharray="6,6"
+              opacity="0.85"
+            >
+              <animate
+                attributeName="stroke-dashoffset"
+                values="40;0"
+                dur="1.8s"
+                repeatCount="indefinite"
+              />
+            </path>
+            {activeFlow.map(agentId => {
+              const agent = AGENTS.find(a => a.id === agentId);
+              if (!agent) return null;
+              return (
+                <circle key={agentId} cx={agent.sceneX} cy={agent.sceneY - 10} r="4" fill="#F59E0B">
+                  <animate attributeName="r" values="3;6;3" dur="1.5s" repeatCount="indefinite"/>
+                  <animate attributeName="opacity" values="0.8;0.3;0.8" dur="1.5s" repeatCount="indefinite"/>
+                </circle>
+              );
+            })}
+          </g>
+        )}
 
         {/* ── Warm ambient center glow ── */}
         <rect x="0" y="0" width="900" height="580" fill="url(#ambient-center)" pointerEvents="none"/>

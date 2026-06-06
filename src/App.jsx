@@ -51,19 +51,19 @@ function getOrchestratorFlow(task) {
 // ── Empty-state placeholder for the right panel ───────────────────
 function ChatPlaceholder({ onSelect }) {
   return (
-    <div className="flex flex-col h-full w-full" style={{ background: '#FAF3E8' }}>
+    <div className="flex flex-col h-full w-full" style={{ background: 'transparent' }}>
       <div className="h-1" style={{ background: 'linear-gradient(90deg, #F59E0B, #D97706)' }}/>
 
       <div className="flex-1 flex flex-col items-center justify-center px-8 gap-7 min-h-0 overflow-y-auto py-8">
         {/* Branding */}
         <div className="text-center">
           <div className="text-5xl mb-3">🌳</div>
-          <h1 className="text-2xl font-bold text-amber-900 tracking-tight mb-1">Pixel Office</h1>
-          <p className="text-sm text-amber-700/60">ห้องผู้บริหาร · AI Agent Team</p>
+          <h1 className="text-2xl font-bold text-amber-100 tracking-tight mb-1">Pixel Office</h1>
+          <p className="text-sm text-amber-400/70">ห้องผู้บริหาร · AI Agent Team</p>
         </div>
 
         {/* Instruction */}
-        <p className="text-sm text-amber-800/55 text-center max-w-xs">
+        <p className="text-sm text-amber-200/60 text-center max-w-xs leading-relaxed">
           เลือกตัวละครจากออฟฟิศด้านซ้ายเพื่อเริ่มสนทนา หรือคลิกที่ตัวแทนด้านล่าง
         </p>
 
@@ -74,7 +74,7 @@ function ChatPlaceholder({ onSelect }) {
               key={agent.id}
               onClick={() => onSelect(agent.id)}
               className="flex flex-col items-center gap-1.5 py-3 px-1 rounded-2xl cursor-pointer transition-all hover:scale-108 active:scale-95"
-              style={{ background: `${agent.color}18`, border: `1px solid ${agent.color}28` }}
+              style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid rgba(255,255,255,0.06)` }}
             >
               <div className="overflow-hidden rounded-xl flex items-end justify-center"
                 style={{ width: 40, height: 40, background: `${agent.color}22` }}>
@@ -83,7 +83,7 @@ function ChatPlaceholder({ onSelect }) {
               <span className="text-center font-bold leading-none" style={{ color: agent.color, fontSize: '9px' }}>
                 {agent.name}
               </span>
-              <span className="text-center leading-none" style={{ color: agent.color + '90', fontSize: '8px' }}>
+              <span className="text-center leading-none" style={{ color: 'rgba(255,255,255,0.4)', fontSize: '8px' }}>
                 {agent.role}
               </span>
             </button>
@@ -91,9 +91,9 @@ function ChatPlaceholder({ onSelect }) {
         </div>
 
         {/* Model info */}
-        <div className="text-center space-y-1" style={{ color: 'rgba(160,90,20,0.4)', fontSize: '10px' }}>
+        <div className="text-center space-y-1" style={{ color: 'rgba(255,255,255,0.25)', fontSize: '10px' }}>
           <p>Ace · Charlie · Coco → claude-sonnet-4-5</p>
-          <p>Others → claude-haiku-3-5</p>
+          <p>Others → claude-haiku-4-5</p>
         </div>
       </div>
     </div>
@@ -112,6 +112,7 @@ export default function App() {
   const messagesRef = useRef(messages)
   messagesRef.current = messages
   const [loadingHistory, setLoadingHistory] = useState({})
+  const [activeFlow, setActiveFlow] = useState([])
 
   const loadHistory = useCallback(async (agentId) => {
     const agent = getAgent(agentId)
@@ -277,6 +278,7 @@ ${haanSummary ? `ห่านการเงินโปรเจค: $${haanSum
 
         // runChain: เรียก agent ทีละคน ส่ง context สะสมไปด้วย
         const runChain = async () => {
+          setActiveFlow(['ace', ...subIds])
           // ดึง team logs ครั้งเดียวสำหรับทั้ง chain
           const teamLogs = await getRecentLogs({ limit: 8 })
           let sharedContext = `งานที่ได้รับ: "${text}"\nAce ตอบว่า: ${aceReplyText}`
@@ -334,6 +336,8 @@ ${haanSummary ? `ห่านการเงินโปรเจค: $${haanSum
               setAgentState(subId, 'idle')
             }
           }
+          // Clear active flow line after a delay so it remains visible for a bit
+          setTimeout(() => setActiveFlow([]), 5000)
         }
 
         runChain()
@@ -452,14 +456,15 @@ ${haanSummary ? `ห่านการเงินโปรเจค: $${haanSum
   const handleClose = useCallback(() => setSelectedAgent(null), [])
 
   return (
-    <div className="flex flex-col w-screen h-screen overflow-hidden" style={{ background: '#2C1810' }}>
+    <div className="flex flex-col w-screen h-screen overflow-hidden" style={{ background: 'radial-gradient(circle at center, #182016 0%, #0c0e0b 100%)' }}>
 
       {/* ── Top bar ── */}
       <div
         className="flex items-center justify-between px-4 py-2.5 shrink-0 gap-3"
         style={{
-          background: 'linear-gradient(90deg, #1A0C05 0%, #2C1810 50%, #3A1E08 100%)',
-          borderBottom: '1px solid rgba(210,140,50,0.2)',
+          background: 'rgba(15, 20, 15, 0.45)',
+          backdropFilter: 'blur(16px)',
+          borderBottom: '1px solid rgba(255, 255, 255, 0.06)',
         }}
       >
         {/* Logo */}
@@ -537,6 +542,7 @@ ${haanSummary ? `ห่านการเงินโปรเจค: $${haanSum
               agentStates={agentStates}
               selectedAgent={selectedAgent}
               onCharacterClick={handleCharacterClick}
+              activeFlow={activeFlow}
             />
             <AnimatePresence>
               {!selectedAgent && (
@@ -608,7 +614,9 @@ ${haanSummary ? `ห่านการเงินโปรเจค: $${haanSum
           style={{
             width: selectedAgent ? '60%' : '0%',
             minWidth: 0,
-            borderLeft: selectedAgent ? '1px solid rgba(210,140,50,0.14)' : 'none',
+            borderLeft: selectedAgent ? '1px solid rgba(255, 255, 255, 0.06)' : 'none',
+            background: 'rgba(12, 15, 12, 0.45)',
+            backdropFilter: 'blur(16px)',
           }}
         >
           <AnimatePresence mode="wait">

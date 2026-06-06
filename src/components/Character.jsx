@@ -15,29 +15,37 @@ export default function Character({ agent, state, isSelected, onClick, taskText 
       style={{ width: '84px' }}
       onClick={onClick}
     >
-      {/* Floating task label */}
+      {/* Floating task bubble (Speech Bubble) */}
       <AnimatePresence>
         {taskText && (
           <motion.div
             key={taskText}
-            initial={{ opacity: 0, y: 4, scale: 0.85 }}
+            initial={{ opacity: 0, y: 8, scale: 0.85 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -4, scale: 0.85 }}
+            exit={{ opacity: 0, y: -8, scale: 0.85 }}
             transition={{ duration: 0.2 }}
-            className="absolute whitespace-nowrap rounded-lg font-bold text-white shadow-lg pointer-events-none"
+            className="absolute whitespace-nowrap rounded-2xl text-gray-800 font-bold border pointer-events-none shadow-xl flex items-center justify-center gap-1.5"
             style={{
-              top: '-26px',
+              top: '-36px',
               left: '50%',
               transform: 'translateX(-50%)',
-              background: `linear-gradient(135deg, ${agent.color}, ${agent.accent})`,
-              fontSize: '8px',
-              padding: '2px 7px',
-              letterSpacing: '0.03em',
-              boxShadow: `0 2px 10px ${agent.color}70`,
+              background: 'white',
+              borderColor: `${agent.color}40`,
+              fontSize: '10px',
+              padding: '6px 12px',
+              boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
               zIndex: 10,
             }}
           >
-            {taskText}
+            {/* Speech bubble tail */}
+            <div
+              className="absolute bottom-[-5px] left-1/2 -translate-x-1/2 w-2.5 h-2.5 bg-white border-r border-b"
+              style={{
+                borderColor: `${agent.color}40`,
+                transform: 'translateX(-50%) rotate(45deg)',
+              }}
+            />
+            <span>{taskText}</span>
           </motion.div>
         )}
       </AnimatePresence>
@@ -51,7 +59,7 @@ export default function Character({ agent, state, isSelected, onClick, taskText 
             exit={{ opacity: 0, y: 4 }}
             className="absolute whitespace-nowrap px-2 py-0.5 rounded-full text-xs font-semibold text-white shadow-lg pointer-events-none"
             style={{
-              top: taskText ? '-44px' : '-26px',
+              top: taskText ? '-54px' : '-26px',
               left: '50%',
               transform: 'translateX(-50%)',
               background: agent.color,

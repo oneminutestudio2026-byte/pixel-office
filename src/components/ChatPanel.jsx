@@ -71,11 +71,11 @@ function MessageBubble({ msg }) {
     >
       <div
         className={`max-w-[88%] rounded-2xl text-sm leading-relaxed ${
-          isUser ? 'text-white rounded-br-sm px-3.5 py-2.5 whitespace-pre-wrap' : 'text-gray-800 rounded-bl-sm overflow-hidden'
+          isUser ? 'text-white rounded-br-sm px-3.5 py-2.5 whitespace-pre-wrap' : 'text-amber-50 rounded-bl-sm overflow-hidden'
         }`}
         style={isUser
-          ? { background: 'linear-gradient(135deg, #7C3AED, #A855F7)' }
-          : { background: 'white', border: '1px solid rgba(0,0,0,0.08)', boxShadow: '0 1px 6px rgba(0,0,0,0.07)' }
+          ? { background: 'linear-gradient(135deg, #D97706, #F59E0B)', boxShadow: '0 2px 10px rgba(217,119,6,0.25)' }
+          : { background: 'rgba(255, 255, 255, 0.05)', border: '1px solid rgba(255, 255, 255, 0.08)', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }
         }
       >
         {isImage ? (
@@ -87,7 +87,7 @@ function MessageBubble({ msg }) {
               style={{ maxWidth: '320px', display: 'block' }}
             />
             {msg.content && (
-              <p className="px-3 py-2 text-gray-700 text-xs leading-relaxed">{msg.content}</p>
+              <p className="px-3 py-2 text-amber-100/80 text-xs leading-relaxed">{msg.content}</p>
             )}
           </div>
         ) : (
@@ -146,7 +146,7 @@ export default function ChatPanel({ agentId, agentStates, messages, loadingHisto
   }
 
   return (
-    <div className="flex flex-col h-full w-full" style={{ background: agent.lightBg }}>
+    <div className="flex flex-col h-full w-full" style={{ background: 'transparent' }}>
 
       {/* Accent line at top */}
       <div className="h-1 shrink-0" style={{ background: `linear-gradient(90deg, ${agent.color}, ${agent.accent})` }}/>
@@ -154,7 +154,7 @@ export default function ChatPanel({ agentId, agentStates, messages, loadingHisto
       {/* ── Header ── */}
       <div
         className="flex items-center gap-3 px-4 py-3 shrink-0"
-        style={{ background: `linear-gradient(135deg, ${agent.color}1A, ${agent.color}08)`, borderBottom: `1px solid ${agent.color}28` }}
+        style={{ background: 'rgba(255, 255, 255, 0.02)', borderBottom: `1px solid rgba(255, 255, 255, 0.06)` }}
       >
         {/* Avatar */}
         <div
@@ -167,13 +167,13 @@ export default function ChatPanel({ agentId, agentStates, messages, loadingHisto
         {/* Name + role + status */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-bold text-gray-800 text-base leading-tight">{agent.name}</span>
+            <span className="font-bold text-amber-100 text-base leading-tight">{agent.name}</span>
             <span className="text-xs px-2 py-0.5 rounded-full font-semibold text-white shrink-0"
               style={{ background: agent.color }}>
               {agent.role}
             </span>
           </div>
-          <div className="text-xs text-gray-400 mt-0.5 truncate">{agent.description}</div>
+          <div className="text-xs text-amber-200/50 mt-0.5 truncate">{agent.description}</div>
           <div className="mt-1.5"><StatusBadge state={currentState}/></div>
         </div>
 
@@ -183,13 +183,13 @@ export default function ChatPanel({ agentId, agentStates, messages, loadingHisto
             onClick={handleClearClick}
             disabled={isBusy || clearing}
             title="ล้างความจำ (Clear Memory)"
-            className="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-black/10 transition-colors text-sm disabled:opacity-30 cursor-pointer"
+            className="w-8 h-8 rounded-full flex items-center justify-center text-amber-200/60 hover:text-red-400 hover:bg-white/5 transition-colors text-sm disabled:opacity-30 cursor-pointer"
           >
             {clearing ? '⏳' : '🗑️'}
           </button>
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-black/10 transition-colors text-lg leading-none cursor-pointer"
+            className="w-8 h-8 rounded-full flex items-center justify-center text-amber-200/60 hover:text-white hover:bg-white/5 transition-colors text-lg leading-none cursor-pointer"
           >
             ×
           </button>
@@ -198,8 +198,8 @@ export default function ChatPanel({ agentId, agentStates, messages, loadingHisto
 
       {/* System note (Ace only) — compact */}
       {agent.systemNote && (
-        <div className="mx-3 mt-1.5 px-3 py-1.5 rounded-xl text-xs text-gray-500 shrink-0"
-          style={{ background: `${agent.color}10`, border: `1px solid ${agent.color}20` }}>
+        <div className="mx-3 mt-1.5 px-3 py-1.5 rounded-xl text-xs text-amber-200/60 shrink-0"
+          style={{ background: 'rgba(255, 255, 255, 0.02)', border: '1px solid rgba(255, 255, 255, 0.06)' }}>
           <span className="font-semibold">ℹ️ </span>{agent.systemNote}
         </div>
       )}
@@ -208,8 +208,8 @@ export default function ChatPanel({ agentId, agentStates, messages, loadingHisto
       <div className="flex-1 overflow-y-auto px-3 py-3 min-h-0">
         {loadingHistory ? (
           <div className="flex flex-col items-center justify-center py-12 gap-3 h-full">
-            <div className="w-8 h-8 rounded-full border-4 border-amber-900/10 animate-spin" style={{ borderTopColor: agent.color }} />
-            <p className="text-xs font-semibold text-gray-500">กำลังโหลดประวัติจาก Notion...</p>
+            <div className="w-8 h-8 rounded-full border-4 border-white/10 animate-spin" style={{ borderTopColor: agent.color }} />
+            <p className="text-xs font-semibold text-amber-200/50">กำลังโหลดประวัติจาก Notion...</p>
           </div>
         ) : (
           <>
@@ -233,7 +233,7 @@ export default function ChatPanel({ agentId, agentStates, messages, loadingHisto
                   exit={{ opacity: 0, y: 4 }}
                   className="flex justify-start mb-2"
                 >
-                  <div className="px-4 py-3 rounded-2xl rounded-bl-sm bg-white border border-black/8 flex gap-1.5 items-center shadow-sm">
+                  <div className="px-4 py-3 rounded-2xl rounded-bl-sm bg-white/5 border border-white/8 flex gap-1.5 items-center shadow-sm">
                     <span className="w-2 h-2 rounded-full dot-1" style={{ background: agent.color }}/>
                     <span className="w-2 h-2 rounded-full dot-2" style={{ background: agent.color }}/>
                     <span className="w-2 h-2 rounded-full dot-3" style={{ background: agent.color }}/>
@@ -255,8 +255,8 @@ export default function ChatPanel({ agentId, agentStates, messages, loadingHisto
               key={i}
               disabled={isBusy}
               onClick={() => { setInput(action); inputRef.current?.focus() }}
-              className="whitespace-nowrap px-3 py-1 rounded-full text-xs font-medium border transition-all hover:scale-105 active:scale-95 shrink-0 disabled:opacity-40"
-              style={{ background: `${agent.color}12`, borderColor: `${agent.color}35`, color: agent.accent }}
+              className="whitespace-nowrap px-3 py-1 rounded-full text-xs font-semibold border transition-all hover:scale-105 active:scale-95 shrink-0 disabled:opacity-40 cursor-pointer"
+              style={{ background: 'rgba(255,255,255,0.03)', borderColor: 'rgba(255,255,255,0.08)', color: '#F3F4F6' }}
             >
               {action}
             </button>
@@ -269,9 +269,9 @@ export default function ChatPanel({ agentId, agentStates, messages, loadingHisto
         <div
           className="flex items-end gap-2 p-2.5 rounded-2xl transition-all"
           style={{
-            background: 'white',
-            border: `1.5px solid ${isBusy ? agent.color + '80' : agent.color + '40'}`,
-            boxShadow: `0 2px 16px ${agent.color}12`,
+            background: 'rgba(0, 0, 0, 0.25)',
+            border: `1px solid ${isBusy ? agent.color + '80' : 'rgba(255, 255, 255, 0.08)'}`,
+            boxShadow: `0 4px 20px rgba(0,0,0,0.2)`,
           }}
         >
           <textarea
@@ -282,7 +282,7 @@ export default function ChatPanel({ agentId, agentStates, messages, loadingHisto
             placeholder={isBusy ? `${agent.name} กำลังตอบ...` : `ส่งข้อความถึง ${agent.name}…`}
             rows={1}
             disabled={isBusy}
-            className="flex-1 resize-none bg-transparent text-sm text-gray-800 placeholder-gray-400 outline-none leading-relaxed py-1 px-1 disabled:opacity-50"
+            className="flex-1 resize-none bg-transparent text-sm text-amber-50 placeholder-amber-200/30 outline-none leading-relaxed py-1 px-1 disabled:opacity-50"
             style={{ maxHeight: '120px', minHeight: '36px' }}
           />
           <button
@@ -291,8 +291,8 @@ export default function ChatPanel({ agentId, agentStates, messages, loadingHisto
             className="w-9 h-9 rounded-xl flex items-center justify-center text-white font-bold transition-all active:scale-95 disabled:opacity-30 disabled:cursor-not-allowed shrink-0"
             style={{
               background: (input.trim() && !isBusy)
-                ? `linear-gradient(135deg, ${agent.color}, ${agent.accent})`
-                : '#CBD5E1',
+                ? `linear-gradient(135deg, #D97706, #F59E0B)`
+                : 'rgba(255,255,255,0.05)',
             }}
           >
             {isBusy
@@ -304,8 +304,8 @@ export default function ChatPanel({ agentId, agentStates, messages, loadingHisto
               : <span className="text-base leading-none">↑</span>}
           </button>
         </div>
-        <p className="text-center mt-1.5" style={{ fontSize: '10px', color: 'rgba(120,80,40,0.45)' }}>
-          {isBusy ? 'รอการตอบกลับจาก Claude API…' : 'Enter ส่ง · Shift+Enter ขึ้นบรรทัด'}
+        <p className="text-center mt-1.5" style={{ fontSize: '10px', color: 'rgba(255,255,255,0.2)' }}>
+          {isBusy ? 'รอการตอบกลับจาก API…' : 'Enter ส่ง · Shift+Enter ขึ้นบรรทัด'}
         </p>
       </div>
     </div>
