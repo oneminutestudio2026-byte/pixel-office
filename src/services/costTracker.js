@@ -2,13 +2,23 @@
 
 // ── ราคา API (USD) ────────────────────────────────────────────────
 export const RATES = {
-  'claude-sonnet-4-5':       { input: 3.00,  output: 15.00,  unit: 'per MTok' },
+  // Anthropic
+  'claude-sonnet-4-5':        { input: 3.00,  output: 15.00,  unit: 'per MTok' },
   'claude-haiku-4-5-20251001':{ input: 0.80,  output: 4.00,   unit: 'per MTok' },
-  'fal-image':               { cost: 0.005,  unit: 'per image' },
-  'fal-video-seedance':      { cost: 0.060,  unit: 'per second' },
-  'fal-video-wan':           { cost: 0.050,  unit: 'per second' },
-  'iapp-tts':                { cost: 0.0025, unit: 'per 400 chars' },
-  'notion-api':              { cost: 0,      unit: 'free' },
+  // OpenAI
+  'gpt-5':                    { input: 1.25,  output: 10.00,  unit: 'per MTok' },
+  'gpt-4o':                   { input: 2.50,  output: 10.00,  unit: 'per MTok' },
+  // DeepSeek
+  'deepseek-chat':            { input: 0.14,  output: 0.28,   unit: 'per MTok' },
+  // Google Gemini
+  'gemini-2.5-flash':         { input: 0.30,  output: 2.50,   unit: 'per MTok' },
+  'gemini-2.0-flash':         { input: 0.10,  output: 0.40,   unit: 'per MTok' },
+  // Media
+  'fal-image':                { cost: 0.005,  unit: 'per image' },
+  'fal-video-seedance':       { cost: 0.060,  unit: 'per second' },
+  'fal-video-wan':            { cost: 0.050,  unit: 'per second' },
+  'iapp-tts':                 { cost: 0.0025, unit: 'per 400 chars' },
+  'notion-api':               { cost: 0,      unit: 'free' },
 }
 
 // ── Budget ตั้งต้น (USD) — แก้ได้ ──────────────────────────────────
