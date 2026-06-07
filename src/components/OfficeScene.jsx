@@ -167,7 +167,7 @@ export default function OfficeScene({ agentStates, selectedAgent, onCharacterCli
       {/* Floor label */}
       <div className="absolute bottom-2 left-4 text-xs pointer-events-none"
         style={{ color: 'rgba(180,100,50,0.35)', fontSize: '9px' }}>
-        Executive Treehouse · 11 Agents Active
+        Executive Treehouse · 12 Agents Active
       </div>
       </div>{/* end preserve-3d wrapper */}
     </div>

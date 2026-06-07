@@ -438,6 +438,7 @@ const IMAGE_AVATARS = {
   hamster: '/avatars/bean.png',
   parrot: '/avatars/sonic.png',
   fox: '/avatars/nova.png',
+  owl: '/avatars/hunter.png',
 }
 
 export default function AgentAvatar({ animal, state = 'idle', size }) {

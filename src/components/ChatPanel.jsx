@@ -61,6 +61,7 @@ function TaskFlowPanel({ agent, agentStates }) {
 function MessageBubble({ msg }) {
   const isUser = msg.role === 'user'
   const isImage = msg.type === 'image' && msg.imageUrl
+  const isVideo = (msg.type === 'video' || (msg.imageUrl && msg.imageUrl.endsWith('.mp4'))) && msg.imageUrl
 
   return (
     <motion.div
@@ -86,6 +87,25 @@ function MessageBubble({ msg }) {
               className="w-full rounded-t-2xl rounded-bl-none"
               style={{ maxWidth: '320px', display: 'block' }}
             />
+            {msg.content && (
+              <p className="px-3 py-2 text-amber-100/80 text-xs leading-relaxed">{msg.content}</p>
+            )}
+          </div>
+        ) : isVideo ? (
+          <div className="flex flex-col">
+            <div className="relative w-full rounded-t-2xl rounded-bl-none overflow-hidden" style={{ maxWidth: '320px' }}>
+              <video
+                src={msg.imageUrl}
+                controls
+                className="w-full object-cover"
+                style={{ display: 'block' }}
+              />
+              <img
+                src="/goose_logo.png"
+                alt="Goose Watermark"
+                className="absolute top-2 left-2 w-8 h-8 rounded-full pointer-events-none opacity-80 shadow-md border border-white/20"
+              />
+            </div>
             {msg.content && (
               <p className="px-3 py-2 text-amber-100/80 text-xs leading-relaxed">{msg.content}</p>
             )}
@@ -322,6 +342,8 @@ function getQuickActions(id) {
     arlo:    ['สแกน security', 'ตรวจ infra', 'รีวิว access logs'],
     charlie: ['วิเคราะห์ performance', 'เปรียบ benchmark', 'วิเคราะห์ trading'],
     coco:    ['ประเมิน risk', 'สรุปกลยุทธ์', 'executive summary'],
+    hunter:  ['ล่าข่าวเศรษฐกิจโลก', 'แปลบทความภาษาอังกฤษ', 'สรุป Money Impact ของนโยบายรัฐ'],
+    nova:    ['วางแผนตัดต่อวิดีโอ', 'รีวิววิดีโอ 100WEALTH', 'จัดองค์ประกอบภาพในคลิป'],
   }
   return m[id] || ['ช่วยอะไรได้บ้าง?', 'ทักษะของคุณ?']
 }
