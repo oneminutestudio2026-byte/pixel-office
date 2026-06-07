@@ -525,6 +525,7 @@ async function runTelegramSwarm(promptText) {
   if (!ace) return
 
   const sessionId = `telegram_${Date.now()}`
+  let swarmCost = 0
 
   // Reset Swarm State for new run
   globalSwarmMessages = []
@@ -624,6 +625,14 @@ async function runTelegramSwarm(promptText) {
         if (extractedPrompt && extractedPrompt.length > 10) {
           await sendTelegramMessage(`🎨 **[Violet]** กำลังสร้างรูปภาพจาก prompt: "${extractedPrompt}"...`)
           const imageUrl = await backendGenerateImage(extractedPrompt)
+          swarmCost += 0.003
+          await backendLogExpense({
+            agentName: 'Violet',
+            category: 'fal.ai Image',
+            description: `FLUX Schnell: ${extractedPrompt}`,
+            usd: 0.003,
+            sessionId: sessionId
+          })
           await sendTelegramPhoto(imageUrl, `🎨 รูปภาพโดย Violet\nPrompt: _${extractedPrompt}_`)
 
           globalAgentStates[agentId] = 'done'
@@ -740,6 +749,14 @@ async function runTelegramSwarm(promptText) {
     try {
       const videoUrl = await backendGenerateVideo(videoPrompt, violetImageUrl)
       if (videoUrl) {
+        swarmCost += 0.25
+        await backendLogExpense({
+          agentName: 'Nova',
+          category: 'fal.ai Video',
+          description: `WAN 2.7 Video: ${videoPrompt}`,
+          usd: 0.25,
+          sessionId: sessionId
+        })
         // Send the video to Telegram
         await sendTelegramVideo(videoUrl, `🦢 *ห่านการเงิน* — ${promptText}\n📅 ${new Date().toLocaleDateString('th-TH')}`)
 
@@ -764,7 +781,7 @@ ${captions.twitter || '-'}
 ${captions.hashtags || ''}
 
 ───────────────
-💰 ต้นทุนวันนี้: $0.35
+💰 ต้นทุนวันนี้: $${swarmCost.toFixed(3)}
 🔑 Session: \`${sessionId}\`
         `.trim()
 
