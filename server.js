@@ -849,19 +849,22 @@ app.post('/webhook/telegram', async (req, res) => {
       const geminiApiKey = process.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY
       if (!geminiApiKey) throw new Error('Gemini API Key missing')
 
-      const prompt = `You are a CFO hamster named Bean. Analyze the receipt image and extract:
-1. Short description of what was purchased (in English or Thai, e.g., "Hosting fee", "AI API Credit").
-2. Total amount in USD. If receipt is in THB, convert to USD using rate 35 THB/USD (e.g., 350 THB = 10 USD).
+      const prompt = `You are a CFO hamster named Bean. Analyze the receipt image. If it contains multiple bills, bank alerts, transaction notifications, or receipts (e.g. a collage of multiple credit card screenshots), please extract ALL of them.
+For each transaction, extract:
+1. Short description of what was purchased (in English or Thai, e.g. "Google Storage 750 THB", "DeepSeek USD 5.30").
+2. Total amount in USD. If the amount is in THB, convert to USD using rate 35 THB/USD.
 3. Category (must be one of: 'Claude API', 'fal.ai Image', 'fal.ai Video', 'TTS iApp', 'Railway', 'Other').
-4. Notes (any interesting details, invoice number or date).
+4. Notes (any interesting details, invoice number, date/time if visible).
 
-Return ONLY a JSON block, no markdown wrappers, no backticks, like:
-{
-  "description": "...",
-  "usd": 12.34,
-  "category": "...",
-  "notes": "..."
-}`
+Return ONLY a JSON array, no markdown wrappers, no backticks, like:
+[
+  {
+    "description": "...",
+    "usd": 12.34,
+    "category": "...",
+    "notes": "..."
+  }
+]`
 
       const geminiRes = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`,
@@ -892,30 +895,38 @@ Return ONLY a JSON block, no markdown wrappers, no backticks, like:
       const geminiData = await geminiRes.json()
       const geminiText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
 
-      const jsonMatch = geminiText.match(/\{[\s\S]*?\}/)
-      if (!jsonMatch) throw new Error(`Could not parse JSON from Gemini response`)
+      const jsonMatch = geminiText.match(/\[[\s\S]*?\]/)
+      let expenses = []
+      if (jsonMatch) {
+        expenses = JSON.parse(jsonMatch[0])
+      } else {
+        const singleMatch = geminiText.match(/\{[\s\S]*?\}/)
+        if (singleMatch) {
+          expenses = [JSON.parse(singleMatch[0])]
+        } else {
+          throw new Error(`Could not parse JSON array or object from Gemini response`)
+        }
+      }
 
-      const expense = JSON.parse(jsonMatch[0])
+      if (!Array.isArray(expenses)) {
+        expenses = [expenses]
+      }
 
-      // Log expense to Notion Finance DB
-      await backendLogExpense({
-        agentName: 'Bean',
-        category: expense.category || 'Other',
-        description: expense.description || 'ใบเสร็จค่าใช้จ่าย',
-        usd: Number(expense.usd || 0),
-        notes: expense.notes || '',
-        sessionId: `telegram_billing_${Date.now()}`
-      })
+      const loggedItems = []
+      for (const expense of expenses) {
+        await backendLogExpense({
+          agentName: 'Bean',
+          category: expense.category || 'Other',
+          description: expense.description || 'ใบเสร็จค่าใช้จ่าย',
+          usd: Number(expense.usd || 0),
+          notes: expense.notes || '',
+          sessionId: `telegram_billing_${Date.now()}`
+        })
+        const thbAmount = Math.round(Number(expense.usd || 0) * 35 * 100) / 100
+        loggedItems.push(`- **${expense.description}**: $${Number(expense.usd).toFixed(2)} (~฿${thbAmount.toLocaleString('th-TH')}) [${expense.category}]`)
+      }
 
-      const thbAmount = Math.round(Number(expense.usd || 0) * 35 * 100) / 100
-      await sendTelegramMessage(`🐹 **[Bean CFO]** ได้บันทึกค่าใช้จ่ายลง Notion เรียบร้อยแล้วค่ะ! 🎉
-
-📋 **รายละเอียดการบันทึกบัญชี:**
-- **รายการ:** ${expense.description}
-- **ยอดเงิน:** $${Number(expense.usd).toFixed(2)} (~฿${thbAmount.toLocaleString('th-TH')})
-- **หมวดหมู่:** ${expense.category}
-- **โปรเจกต์:** ห่านการเงิน
-- **บันทึกเพิ่มเติม:** ${expense.notes || '-'}`)
+      await sendTelegramMessage(`🐹 **[Bean CFO]** ได้สแกนรูปภาพและบันทึกค่าใช้จ่ายลง Notion เรียบร้อยแล้วทั้งหมด **${expenses.length}** รายการค่ะ! 🎉\n\n📋 **รายการที่บันทึกบัญชี:**\n${loggedItems.join('\n')}`)
 
     } catch (err) {
       console.error('Failed to process receipt billing:', err)
