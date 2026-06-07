@@ -849,11 +849,25 @@ app.post('/webhook/telegram', async (req, res) => {
       const geminiApiKey = process.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY
       if (!geminiApiKey) throw new Error('Gemini API Key missing')
 
-      const prompt = `You are a CFO hamster named Bean. Analyze the receipt image. If it contains multiple bills, bank alerts, transaction notifications, or receipts (e.g. a collage of multiple credit card screenshots), please extract ALL of them.
+      const prompt = `You are a CFO hamster named Bean. Analyze the receipt image. It may contain a collage of multiple credit card SMS alerts or bank transaction notifications. You MUST extract all transactions and categorize them.
+
+Here is the classification guide for AI/SaaS expenses:
+- Anthropic / Claude -> Category: 'Claude API'
+- OpenAI / ChatGPT -> Category: 'OpenAI API'
+- DeepSeek -> Category: 'DeepSeek API'
+- Google Cloud / Google One / Google API -> Category: 'Google Cloud'
+- fal.ai / FAL FEATURES -> Category: 'fal.ai Image' (if image) or 'fal.ai Video' (if video)
+- TTS / iApp -> Category: 'TTS iApp'
+- Railway / Render.com / Vercel -> Category: 'Railway'
+- CapCut -> Category: 'CapCut'
+- TrueAIHub / OMISE*TRUEAIHUB -> Category: 'TrueAIHub'
+- Other SaaS/AI tools -> Category: 'Other AI Tools'
+- Non-AI/Non-SaaS expenses -> Category: 'Other'
+
 For each transaction, extract:
 1. Short description of what was purchased (in English or Thai, e.g. "Google Storage 750 THB", "DeepSeek USD 5.30").
 2. Total amount in USD. If the amount is in THB, convert to USD using rate 35 THB/USD.
-3. Category (must be one of: 'Claude API', 'fal.ai Image', 'fal.ai Video', 'TTS iApp', 'Railway', 'Other').
+3. Category (must be one of the categories listed above).
 4. Notes (any interesting details, invoice number, date/time if visible).
 
 Return ONLY a JSON array, no markdown wrappers, no backticks, like:
