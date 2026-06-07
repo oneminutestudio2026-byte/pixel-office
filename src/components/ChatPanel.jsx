@@ -342,7 +342,7 @@ function getQuickActions(id) {
     arlo:    ['สแกน security', 'ตรวจ infra', 'รีวิว access logs'],
     charlie: ['วิเคราะห์ performance', 'เปรียบ benchmark', 'วิเคราะห์ trading'],
     coco:    ['ประเมิน risk', 'สรุปกลยุทธ์', 'executive summary'],
-    hunter:  ['ล่าข่าวเศรษฐกิจโลก', 'แปลบทความภาษาอังกฤษ', 'สรุป Money Impact ของนโยบายรัฐ'],
+    sparky:  ['ล่าข่าวเศรษฐกิจโลก', 'แปลบทความภาษาอังกฤษ', 'สรุป Money Impact ของนโยบายรัฐ'],
     nova:    ['วางแผนตัดต่อวิดีโอ', 'รีวิววิดีโอ 100WEALTH', 'จัดองค์ประกอบภาพในคลิป'],
   }
   return m[id] || ['ช่วยอะไรได้บ้าง?', 'ทักษะของคุณ?']
