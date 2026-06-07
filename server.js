@@ -29,6 +29,82 @@ let globalAgentStates = {}
 let globalActiveFlow = []
 let globalSwarmMessages = []
 
+// ── Daily Scheduler & Weekday Topics ──────────────────────────────
+const WEEKDAY_TOPICS = {
+  Monday: [
+    "Credit card debt trap - minimum payment = never-ending debt",
+    "First car purchase - can afford payments, can't afford ownership",
+    "Endowment life insurance - actually good or just good salesmanship?",
+    "MLM / direct sales - small investment big returns, how believable?",
+    "Online Ponzi schemes - what they look like now",
+    "Loan sharks - brutal interest, pay forever and never finish",
+    "0% installments on everything - convenient but fast track to broke"
+  ],
+  Tuesday: [
+    "Side income after work - what are the real options?",
+    "Start online selling with 0 baht - is it really possible?",
+    "Freelance side gigs - tax implications and registration",
+    "Company benefits employees never use",
+    "10% salary raise but no extra savings - why?",
+    "Passive income that's real - not just a dream",
+    "Invest in yourself - which online courses are worth it?"
+  ],
+  Wednesday: [
+    "Room rent - what % of salary is the safe maximum?",
+    "High electricity bills - how to actually reduce them",
+    "200 baht/day food budget - how to make it work",
+    "Commute costs: BTS/MRT vs motorcycle vs car - which wins?",
+    "Monthly phone plan - are you overpaying?",
+    "Medical costs - one illness wipes out all savings",
+    "Forgotten subscriptions: Netflix, Spotify, YouTube Premium"
+  ],
+  Thursday: [
+    "Salary day - how to allocate so it lasts the whole month",
+    "50/30/20 rule - does it work on a 15,000 baht salary?",
+    "e-Wallet & PromptPay - too easy to spend, money vanishes",
+    "Simple income-expense tracking that actually works",
+    "Pay debt first or save first? - the practical answer",
+    "6-month emergency fund - how to build it if salary is low",
+    "Year-end bonus - how to use it smartly, not blow it in a week"
+  ],
+  Friday: [
+    "Fixed deposit vs savings account - what's the difference?",
+    "SSF/RMF funds for beginners - real tax savings",
+    "Gold - is buying gold still a good choice now?",
+    "Stocks - can you start investing with just 1,000 baht?",
+    "Mutual funds - which one for absolute beginners?",
+    "Government bonds - how safe? how to buy?",
+    "ETF, VOO, and S&P 500 - what are they and why do people talk about them?"
+  ],
+  Saturday: [
+    "สรุปข่าวสงครามและความตึงเครียดระหว่างประเทศรอบสัปดาห์ - กระทบราคาน้ำมัน ทองคำ ค่าเงิน ค่าครองชีพ และการลงทุนของคนทำงานอย่างไร พร้อมวิธีปรับตัวรับมือ",
+    "สรุปข่าวสารเทคโนโลยีและ AI รอบสัปดาห์ - เทคโนโลยีใหม่ๆ กระทบการทำงาน รายได้ โอกาสทางอาชีพ หรือหุ้นกลุ่มเทคโนโลยีอย่างไรบ้าง",
+    "สรุปข่าวเศรษฐกิจมหาภาคและหนี้สินรอบสัปดาห์ - สถานการณ์เงินเฟ้อ ดอกเบี้ยนโยบาย หนี้ครัวเรือน และอัตราแลกเปลี่ยน ส่งผลต่อเงินในกระเป๋าคนทำงานอย่างไร",
+    "สรุปข่าวนโยบายรัฐและการเมืองรอบสัปดาห์ - มาตรการกระตุ้นเศรษฐกิจ นโยบายภาษี สวัสดิการรัฐ หรือการปรับค่าแรงขั้นต่ำ กระทบปากท้องและรายจ่ายเราอย่างไร",
+    "สรุปข่าวความเคลื่อนไหวตลาดการลงทุนรอบสัปดาห์ - สถานการณ์หุ้นไทย หุ้นโลก กองทุนรวม พันธบัตร และตลาดคริปโตเคอเรนซีที่คนทำงานต้องรู้",
+    "สรุปข่าวเด่นเพื่อผู้บริโภครอบสัปดาห์ - การปรับขึ้นค่าไฟ ค่าน้ำ ค่าเดินทาง ราคาอาหาร หรือค่าบริการแอปพลิเคชันต่างๆ ที่กระทบรายจ่ายประจำวันโดยตรง",
+    "สรุปภาพรวมข่าวใหญ่ด้านการเงินรอบสัปดาห์ - 3 ข่าวเด่นที่สุดที่กระทบเงินเข้าและเงินออกของคนทำงานไทย พร้อมบทวิเคราะห์สิ่งที่ต้องเตรียมตัวรับมือในสัปดาห์หน้า"
+  ]
+}
+
+const INDICES_FILE = path.join(__dirname, 'current_indices.json')
+let currentIndices = { Monday: 0, Tuesday: 0, Wednesday: 0, Thursday: 0, Friday: 0, Saturday: 0 }
+if (fs.existsSync(INDICES_FILE)) {
+  try {
+    currentIndices = { ...currentIndices, ...JSON.parse(fs.readFileSync(INDICES_FILE, 'utf-8')) }
+  } catch (e) {
+    console.error('Failed to parse current_indices.json, using defaults', e)
+  }
+}
+
+function saveIndices() {
+  try {
+    fs.writeFileSync(INDICES_FILE, JSON.stringify(currentIndices, null, 2))
+  } catch (e) {
+    console.error('Failed to save current_indices.json', e)
+  }
+}
+
 // Health check (no auth)
 app.get('/health', (req, res) => res.send('ok'))
 
@@ -238,6 +314,119 @@ async function sendTelegramVideo(videoUrl, caption) {
     }
   } catch (err) {
     console.error('Failed to send Telegram video:', err)
+  }
+}
+
+async function sendTelegramMessageWithButton(text, buttonText, callbackData) {
+  const token = process.env.VITE_TELEGRAM_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN
+  const chatId = process.env.VITE_TELEGRAM_CHAT_ID || process.env.TELEGRAM_CHAT_ID
+  if (!token || !chatId) return
+
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: text,
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            [
+              { text: buttonText, callback_data: callbackData }
+            ]
+          ]
+        }
+      })
+    })
+    const data = await res.json()
+    if (!data.ok) {
+      console.warn('[Telegram] Button send failed, sending normal message:', data.description)
+      await sendTelegramMessage(text)
+    }
+  } catch (err) {
+    console.error('Failed to send Telegram message with button:', err)
+  }
+}
+
+async function sendTelegramDocument(fileBuffer, filename, caption) {
+  const token = process.env.VITE_TELEGRAM_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN
+  const chatId = process.env.VITE_TELEGRAM_CHAT_ID || process.env.TELEGRAM_CHAT_ID
+  if (!token || !chatId) return
+
+  try {
+    const blob = new Blob([fileBuffer], { type: 'text/plain' })
+    const formData = new FormData()
+    formData.append('chat_id', chatId)
+    formData.append('document', blob, filename)
+    if (caption) {
+      formData.append('caption', caption)
+      formData.append('parse_mode', 'Markdown')
+    }
+
+    const res = await fetch(`https://api.telegram.org/bot${token}/sendDocument`, {
+      method: 'POST',
+      body: formData
+    })
+    const data = await res.json()
+    if (!data.ok) {
+      console.error('Failed to send document to Telegram:', data)
+    }
+  } catch (err) {
+    console.error('Failed to send Telegram document:', err)
+  }
+}
+
+async function backendApproveSessionTasks(sessionId) {
+  const key = process.env.VITE_NOTION_API_KEY || process.env.NOTION_API_KEY
+  const dbId = process.env.VITE_NOTION_DATABASE_ID || process.env.NOTION_DATABASE_ID || '4b58c4384a6148bf9894f91f602129ea'
+  if (!key || !sessionId) return
+
+  try {
+    const queryRes = await fetch(`https://api.notion.com/v1/databases/${dbId}/query`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${key}`,
+        'Content-Type': 'application/json',
+        'Notion-Version': '2022-06-28'
+      },
+      body: JSON.stringify({
+        filter: {
+          property: 'Session ID',
+          rich_text: {
+            equals: sessionId
+          }
+        }
+      })
+    })
+    
+    if (!queryRes.ok) {
+      const err = await queryRes.text()
+      console.error('Failed to query Notion tasks for approval:', err)
+      return
+    }
+
+    const queryData = await queryRes.json()
+    const pages = queryData.results || []
+
+    for (const page of pages) {
+      await fetch(`https://api.notion.com/v1/pages/${page.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${key}`,
+          'Content-Type': 'application/json',
+          'Notion-Version': '2022-06-28'
+        },
+        body: JSON.stringify({
+          properties: {
+            Status: { select: { name: 'approved' } }
+          }
+        })
+      })
+    }
+    console.log(`Notion tasks for session ${sessionId} successfully approved. Count: ${pages.length}`)
+  } catch (err) {
+    console.error('Failed to approve Notion tasks:', err)
   }
 }
 
@@ -966,6 +1155,56 @@ Return the result ONLY as a JSON array (no markdown backticks, no wrapping):
       resultSummary: `ร้อยเรียงภาพนิ่งสไลด์โชว์สลับ 3 วินาทีเรียบร้อยตามบทพากย์`,
       sessionId
     })
+
+    // Generate SRT file
+    const meiMsg = globalSwarmMessages.find(m => m.agentId === 'mei')
+    const meiContent = meiMsg ? meiMsg.content : ''
+    if (meiContent) {
+      await sendTelegramMessage(`🎬 **[Nova]** กำลังสร้างไฟล์ซับไตเติล .srt สำหรับนำเข้า CapCut...`)
+      try {
+        const geminiRes = await callGemini({
+          model: 'gemini-2.5-flash',
+          systemPrompt: `You are a subtitle editor. Given this Thai voiceover script, generate a valid SubRip (.srt) subtitle file.
+Divide the script into sequential segments of roughly 3 to 5 seconds each.
+Assume a standard reading speed in Thai (approx 8-10 characters per second including spaces) to calculate start and end times sequentially.
+Return ONLY the raw SRT subtitle content. No markdown backticks, no wrapping.`,
+          messages: [{ role: 'user', content: meiContent }],
+          maxTokens: 8192
+        })
+
+        const srtContent = geminiRes.text.trim().replace(/^```[a-z]*\n/i, '').replace(/\n```$/i, '')
+        const srtBuffer = Buffer.from(srtContent, 'utf-8')
+
+        const voiceoversDir = path.join(__dirname, 'dist', 'voiceovers')
+        if (!fs.existsSync(voiceoversDir)) {
+          fs.mkdirSync(voiceoversDir, { recursive: true })
+        }
+        const srtFilename = `subtitles_${sessionId}.srt`
+        const srtFilePath = path.join(voiceoversDir, srtFilename)
+        await fs.promises.writeFile(srtFilePath, srtBuffer)
+
+        // Send SRT to Telegram
+        await sendTelegramDocument(srtBuffer, srtFilename, `🎬 ไฟล์ซับไตเติลสำหรับนำเข้า CapCut (.srt)\n🔑 Session: \`${sessionId}\``)
+
+        let srtUrl = `voiceovers/${srtFilename}`
+        let domain = process.env.RAILWAY_PUBLIC_DOMAIN || process.env.PUBLIC_URL
+        if (domain) {
+          if (domain.includes('4036')) domain = domain.replace('4036', 'be99')
+          srtUrl = `https://${domain}/voiceovers/${srtFilename}`
+        }
+
+        await backendLogTask({
+          agentName: 'Nova',
+          task: 'สร้างไฟล์คำบรรยาย SRT',
+          skillsUsed: 'Subtitle Generation',
+          resultSummary: `สร้างไฟล์ซับไตเติล SRT สำเร็จ: ${srtUrl}`,
+          sessionId
+        })
+      } catch (srtErr) {
+        console.error('Failed to generate SRT:', srtErr)
+        await sendTelegramMessage(`💻 **[Leo (Developer)]**: ตรวจพบ Error การทำไฟล์คำบรรยาย .srt ("${srtErr.message}")... ได้ข้ามขั้นตอนนี้เพื่อจัดส่งงานส่วนอื่นให้คุณ J ครับ`)
+      }
+    }
   }
 
   // ── Final Content Package Delivery ────────────────────────────────
@@ -997,7 +1236,7 @@ ${captions.hashtags || ''}
 🔑 Session: \`${sessionId}\`
     `.trim()
 
-    await sendTelegramMessage(captionBlock)
+    await sendTelegramMessageWithButton(captionBlock, `✅ Approve / Done`, `approve_${sessionId}`)
   }
 
   globalSwarmMessages.push({
@@ -1020,6 +1259,42 @@ ${captions.hashtags || ''}
 app.post('/webhook/telegram', async (req, res) => {
   const token = process.env.VITE_TELEGRAM_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN
   const chatId = process.env.VITE_TELEGRAM_CHAT_ID || process.env.TELEGRAM_CHAT_ID
+
+  const callbackQuery = req.body?.callback_query
+  if (callbackQuery) {
+    const senderId = String(callbackQuery.from?.id)
+    const allowedChatId = '8789851296'
+    if (senderId !== allowedChatId) {
+      console.warn(`[Telegram Webhook] Unauthorized callback from chat ID ${senderId}`)
+      return res.status(200).send('Unauthorized')
+    }
+
+    const data = callbackQuery.data || ''
+    if (data.startsWith('approve_')) {
+      const sessionId = data.replace('approve_', '')
+      
+      try {
+        await fetch(`https://api.telegram.org/bot${token}/answerCallbackQuery`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            callback_query_id: callbackQuery.id,
+            text: '✅ อนุมัติการส่งงานเรียบร้อย!'
+          })
+        })
+      } catch (e) {
+        console.error('Failed to answer callback query:', e)
+      }
+
+      await sendTelegramMessage(`🟢 **[Ace]** ได้รับการอนุมัติ (Approve) งานเซสชัน \`${sessionId}\` จาก J เรียบร้อยแล้วครับ! บันทึกสถานะลงระบบบัญชีและงานสำเร็จแล้ว`)
+
+      backendApproveSessionTasks(sessionId).catch(err => {
+        console.error('Failed to approve tasks in Notion:', err)
+      })
+    }
+    return res.status(200).send('OK')
+  }
+
   const message = req.body?.message
   if (!message) {
     return res.status(200).send('OK')
@@ -1211,7 +1486,69 @@ app.get('/{*splat}', (req, res) => {
   res.sendFile(path.join(__dirname, 'dist', 'index.html'))
 })
 
+let lastTriggerDate = ''
+
+async function checkDailySchedule() {
+  const now = new Date()
+  
+  // Format Bangkok date: YYYY-MM-DD
+  const currentDateStr = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Bangkok',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(now).split('/').reverse().join('-')
+  
+  // Format Bangkok time: HH:MM
+  const currentTimeStr = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Bangkok',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  }).format(now)
+
+  // Check if it is exactly 09:00 and we haven't triggered it today yet
+  if (currentTimeStr === '09:00' && lastTriggerDate !== currentDateStr) {
+    lastTriggerDate = currentDateStr
+    
+    // Get current day of the week in Bangkok
+    const dayOfWeek = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Bangkok',
+      weekday: 'long'
+    }).format(now)
+    
+    console.log(`[Scheduler] Daily trigger activated for ${dayOfWeek} at ${currentTimeStr}`)
+    
+    let topicText = ''
+    if (WEEKDAY_TOPICS[dayOfWeek]) {
+      const topicsList = WEEKDAY_TOPICS[dayOfWeek]
+      const currentIdx = currentIndices[dayOfWeek] || 0
+      topicText = topicsList[currentIdx]
+      
+      // Increment and save index
+      currentIndices[dayOfWeek] = (currentIdx + 1) % topicsList.length
+      saveIndices()
+    } else {
+      console.log(`[Scheduler] No automatic swarm scheduled for ${dayOfWeek} (Sunday/Holiday)`)
+      return
+    }
+
+    try {
+      await sendTelegramMessage(`🤖 **[Daily Scheduler]** เริ่มต้นรันขั้นตอนส่งงานอัตโนมัติประจำวัน (${dayOfWeek}) หัวข้อวันนี้คือ: "${topicText}"...`)
+      runTelegramSwarm(topicText).catch(err => {
+        console.error('[Scheduler] Swarm execution failed:', err)
+      })
+    } catch (err) {
+      console.error('[Scheduler] Failed to trigger daily schedule message:', err)
+    }
+  }
+}
+
+// Start daily routine checker
+setInterval(checkDailySchedule, 60000)
+
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Pixel Office running on port ${PORT}`)
   registerTelegramWebhook().catch(err => console.error('Webhook registration failed:', err))
+  console.log(`Daily Scheduler initialized. Checking every minute.`)
 })
