@@ -10,6 +10,8 @@ import { generateVideo, recordScore, getModelStats } from './services/videoServi
 import { sendContentPackage } from './services/telegramService'
 import { recordCost, getSummary, toBaht } from './services/costTracker'
 import { getFinanceSummary } from './services/financeService'
+import SwarmRoom from './components/SwarmRoom'
+
 
 // ── Parse captions จาก Mei's response ────────────────────────────
 function parseCaptions(meiReply) {
@@ -118,6 +120,9 @@ export default function App() {
   const [scanState, setScanState] = useState('idle')
   const [scanMessage, setScanMessage] = useState('')
   const [clearingAllLogs, setClearingAllLogs] = useState(false)
+  const [showSwarmRoom, setShowSwarmRoom] = useState(false)
+  const [swarmMessages, setSwarmMessages] = useState([])
+
 
   const handleClearAllMemory = async () => {
     const ok = window.confirm('คุณแน่ใจหรือไม่ที่จะล้างความจำของเอเจนต์ทุกตัวใน Notion? การกระทำนี้ไม่สามารถย้อนกลับได้')
@@ -158,6 +163,48 @@ export default function App() {
       window.location.reload()
     }
   }
+
+  // Poll background Telegram swarm state
+  useEffect(() => {
+    const intervalId = setInterval(async () => {
+      try {
+        const res = await fetch('/api/swarm-state')
+        if (!res.ok) return
+        const data = await res.json()
+        
+        // If there's an active flow running on the backend
+        if (data.activeFlow && data.activeFlow.length > 0) {
+          setAgentStates(prev => {
+            const nextStates = { ...prev }
+            Object.keys(nextStates).forEach(k => {
+              nextStates[k] = data.agentStates[k] || 'idle'
+            })
+            return nextStates
+          })
+          setActiveFlow(data.activeFlow)
+          setSwarmMessages(data.messages || [])
+          
+          // Auto transition to Swarm Room
+          setShowSwarmRoom(true)
+          setSelectedAgent(null)
+        } else {
+          // If flow just finished, clear active states
+          setActiveFlow(prev => {
+            if (prev.length > 0) {
+              setAgentStates(Object.fromEntries(AGENTS.map(a => [a.id, 'idle'])))
+              return []
+            }
+            return prev
+          })
+        }
+      } catch (err) {
+        // Ignore background polling errors
+      }
+    }, 2000)
+
+    return () => clearInterval(intervalId)
+  }, [])
+
 
   const loadHistory = useCallback(async (agentId) => {
     const agent = getAgent(agentId)
@@ -495,10 +542,15 @@ ${haanSummary ? `ห่านการเงินโปรเจค: $${haanSum
   }, [addMessage, setAgentState, sessionId])
 
   const handleCharacterClick = useCallback((agentId) => {
+    setShowSwarmRoom(false)
     setSelectedAgent(prev => prev === agentId ? null : agentId)
   }, [])
 
-  const handleClose = useCallback(() => setSelectedAgent(null), [])
+  const handleClose = useCallback(() => {
+    setSelectedAgent(null)
+    setShowSwarmRoom(false)
+  }, [])
+
 
   return (
     <div className="flex flex-col w-screen h-screen overflow-hidden" style={{ background: 'radial-gradient(circle at center, #182016 0%, #0c0e0b 100%)' }}>
@@ -574,6 +626,18 @@ ${haanSummary ? `ห่านการเงินโปรเจค: $${haanSum
             >
               <span className="text-lg">🎛️</span>
             </button>
+            {/* Swarm Room button */}
+            <button
+              onClick={() => {
+                setSelectedAgent(null)
+                setShowSwarmRoom(true)
+              }}
+              className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all cursor-pointer ${showSwarmRoom ? 'bg-amber-500/20 text-amber-200 border border-amber-500/30 shadow-md' : 'text-white/50 hover:text-white hover:bg-white/5'}`}
+              title="ห้องประชุมแชท Swarm"
+            >
+              <span className="text-lg">👥</span>
+            </button>
+
             {/* Document button */}
             <button
               onClick={() => window.open(`https://www.notion.so/${import.meta.env.VITE_NOTION_DATABASE_ID || '4b58c4384a6148bf9894f91f602129ea'}`, '_blank')}
@@ -621,11 +685,11 @@ ${haanSummary ? `ห่านการเงินโปรเจค: $${haanSum
 
         {/* Left: Office scene — ขยายเต็มเมื่อไม่มี chat */}
         <div className="flex flex-col h-full overflow-hidden transition-all duration-300"
-          style={{ width: selectedAgent ? '40%' : '100%', minWidth: 0, flexShrink: 0 }}>
+          style={{ width: (selectedAgent || showSwarmRoom) ? '40%' : '100%', minWidth: 0, flexShrink: 0 }}>
 
           {/* Office scene — takes remaining height */}
           <div
-            className={`relative flex-1 overflow-hidden min-h-0 mt-3 ml-3 mb-1.5 ${selectedAgent ? 'mr-1.5' : 'mr-3'} rounded-3xl border border-white/5 bg-black/25 backdrop-blur-md shadow-2xl`}
+            className={`relative flex-1 overflow-hidden min-h-0 mt-3 ml-3 mb-1.5 ${(selectedAgent || showSwarmRoom) ? 'mr-1.5' : 'mr-3'} rounded-3xl border border-white/5 bg-black/25 backdrop-blur-md shadow-2xl`}
           >
             <OfficeScene
               agentStates={agentStates}
@@ -634,7 +698,7 @@ ${haanSummary ? `ห่านการเงินโปรเจค: $${haanSum
               activeFlow={activeFlow}
             />
             <AnimatePresence>
-              {!selectedAgent && (
+              {!(selectedAgent || showSwarmRoom) && (
                 <motion.div
                   initial={{ opacity: 0, y: 4 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -655,7 +719,7 @@ ${haanSummary ? `ห่านการเงินโปรเจค: $${haanSum
 
           {/* Agent status bar — fixed at bottom of left panel */}
           <div
-            className={`shrink-0 ml-3 mb-3 mt-1.5 ${selectedAgent ? 'mr-1.5' : 'mr-3'} rounded-3xl border border-white/5 bg-black/25 backdrop-blur-md shadow-2xl p-4 overflow-y-auto`}
+            className={`shrink-0 ml-3 mb-3 mt-1.5 ${(selectedAgent || showSwarmRoom) ? 'mr-1.5' : 'mr-3'} rounded-3xl border border-white/5 bg-black/25 backdrop-blur-md shadow-2xl p-4 overflow-y-auto`}
             style={{
               maxHeight: '38%',
             }}
@@ -700,7 +764,7 @@ ${haanSummary ? `ห่านการเงินโปรเจค: $${haanSum
         <div
           className="flex flex-col h-full overflow-hidden transition-all duration-300"
           style={{
-            width: selectedAgent ? '60%' : '0%',
+            width: (selectedAgent || showSwarmRoom) ? '60%' : '0%',
             minWidth: 0,
           }}
         >
@@ -731,6 +795,22 @@ ${haanSummary ? `ห่านการเงินโปรเจค: $${haanSum
                     onClose={handleClose}
                   />
                 </motion.div>
+              ) : showSwarmRoom ? (
+                <motion.div
+                  key="swarm-room"
+                  className="h-full w-full"
+                  initial={{ opacity: 0, x: 18 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -18 }}
+                  transition={{ duration: 0.18, ease: 'easeOut' }}
+                >
+                  <SwarmRoom
+                    messages={swarmMessages}
+                    activeFlow={activeFlow}
+                    agentStates={agentStates}
+                    onClose={handleClose}
+                  />
+                </motion.div>
               ) : (
                 <motion.div
                   key="placeholder"
@@ -746,6 +826,7 @@ ${haanSummary ? `ห่านการเงินโปรเจค: $${haanSum
             </AnimatePresence>
           </div>
         </div>
+
 
       </div>
 

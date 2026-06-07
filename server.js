@@ -24,6 +24,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
 const PORT = process.env.PORT || 3000
 
+// Global Swarm Sync State
+let globalAgentStates = {}
+let globalActiveFlow = []
+let globalSwarmMessages = []
+
 // Health check (no auth)
 app.get('/health', (req, res) => res.send('ok'))
 
@@ -32,8 +37,8 @@ const SITE_USER = process.env.SITE_USER || 'admin'
 const SITE_PASS = process.env.SITE_PASS || 'pixeloffice'
 
 app.use((req, res, next) => {
-  // Bypass Basic Auth for health and Telegram webhook
-  if (req.path === '/health' || req.path === '/webhook/telegram') return next()
+  // Bypass Basic Auth for health, Telegram webhook, and swarm state API
+  if (req.path === '/health' || req.path === '/webhook/telegram' || req.path === '/api/swarm-state') return next()
 
   // Skip auth if no password is set
   if (!process.env.SITE_PASS) return next()
@@ -123,6 +128,15 @@ app.post('/api/notion/databases/:id/query', async (req, res) => {
     console.error('[Proxy] Notion db query error:', err)
     res.status(500).json({ error: err.message })
   }
+})
+
+// Endpoint to fetch global swarm states and messages
+app.get('/api/swarm-state', (req, res) => {
+  res.json({
+    agentStates: globalAgentStates,
+    activeFlow: globalActiveFlow,
+    messages: globalSwarmMessages
+  })
 })
 
 // ── Telegram Webhook & LLM Swarm Orchestration ────────────────────
@@ -377,14 +391,46 @@ async function runTelegramSwarm(promptText) {
 
   const sessionId = `telegram_${Date.now()}`
 
+  // Reset Swarm State for new run
+  globalSwarmMessages = []
+  globalAgentStates = { ace: 'thinking' }
+  globalActiveFlow = ['ace']
+
+  globalSwarmMessages.push({
+    agentId: 'user',
+    agentName: 'User',
+    role: 'ผู้ใช้',
+    content: promptText,
+    type: 'text',
+    timestamp: new Date().toLocaleTimeString('th-TH')
+  })
+
   await sendTelegramMessage(`🤖 **[Ace]** ได้รับคำสั่งแล้วครับ: "${promptText}"\nกำลังวิเคราะห์แผนงานและลำดับขั้นตอน...`)
 
   let aceResponse
   try {
     const res = await backendCallAgent(ace, [{ role: 'user', content: promptText }])
     aceResponse = res.text
+    globalAgentStates.ace = 'done'
+    globalSwarmMessages.push({
+      agentId: 'ace',
+      agentName: 'Ace',
+      role: 'Orchestrator',
+      content: aceResponse,
+      type: 'text',
+      timestamp: new Date().toLocaleTimeString('th-TH')
+    })
   } catch (err) {
     console.error('Ace failed:', err)
+    globalAgentStates.ace = 'idle'
+    globalSwarmMessages.push({
+      agentId: 'ace',
+      agentName: 'Ace',
+      role: 'Orchestrator',
+      content: `❌ เกิดข้อผิดพลาดในการวิเคราะห์แผนงาน: ${err.message}`,
+      type: 'text',
+      timestamp: new Date().toLocaleTimeString('th-TH')
+    })
     await sendTelegramMessage(`❌ **[Ace Error]** เกิดข้อผิดพลาดในการวิเคราะห์แผนงาน: ${err.message}`)
     return
   }
@@ -401,16 +447,21 @@ async function runTelegramSwarm(promptText) {
 
   const flowMatch = aceResponse.match(/<flow>(.*?)<\/flow>/i)
   if (!flowMatch) {
+    globalActiveFlow = []
+    globalAgentStates = {}
     await sendTelegramMessage(`💡 **[Ace]** ไม่มีการระบุขั้นตอน flow สำหรับ sub-agents ปฏิบัติงานเสร็จสิ้นแล้วครับ`)
     return
   }
 
   const flowAgents = flowMatch[1].split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
   if (flowAgents.length === 0) {
+    globalActiveFlow = []
+    globalAgentStates = {}
     await sendTelegramMessage(`💡 **[Ace]** ลำดับขั้นตอนเป็นศูนย์ ปฏิบัติงานเสร็จสิ้นแล้วครับ`)
     return
   }
 
+  globalActiveFlow = ['ace', ...flowAgents]
   await sendTelegramMessage(`⛓️ **ขั้นตอนการทำงาน (Flow):** ${flowAgents.join(' ➔ ')}`)
 
   let accumulatedContext = `คำสั่งต้นฉบับของผู้ใช้: "${promptText}"\n\nแผนการทำงานของ Ace:\n${aceResponse}\n\n`
@@ -422,6 +473,7 @@ async function runTelegramSwarm(promptText) {
       continue
     }
 
+    globalAgentStates[agentId] = 'thinking'
     await sendTelegramMessage(`⏳ **[${agent.name}]** กำลังปฏิบัติงานในส่วนของตนเอง...`)
 
     try {
@@ -439,6 +491,17 @@ async function runTelegramSwarm(promptText) {
           const imageUrl = await backendGenerateImage(extractedPrompt)
           await sendTelegramPhoto(imageUrl, `🎨 รูปภาพโดย Violet\nPrompt: _${extractedPrompt}_`)
 
+          globalAgentStates[agentId] = 'done'
+          globalSwarmMessages.push({
+            agentId: agent.id,
+            agentName: agent.name,
+            role: agent.role,
+            content: violetText,
+            type: 'image',
+            imageUrl: imageUrl,
+            timestamp: new Date().toLocaleTimeString('th-TH')
+          })
+
           accumulatedContext += `ผลลัพธ์ของ Violet (ดีไซเนอร์):\nข้อความ: ${violetText}\nรูปภาพที่ถูกสร้างขึ้น (URL): ${imageUrl}\n\n`
 
           await backendLogTask({
@@ -449,6 +512,16 @@ async function runTelegramSwarm(promptText) {
             sessionId
           })
         } else {
+          globalAgentStates[agentId] = 'done'
+          globalSwarmMessages.push({
+            agentId: agent.id,
+            agentName: agent.name,
+            role: agent.role,
+            content: violetText,
+            type: 'text',
+            timestamp: new Date().toLocaleTimeString('th-TH')
+          })
+
           accumulatedContext += `ผลลัพธ์ของ Violet (ดีไซเนอร์):\n${violetText}\n\n`
           await backendLogTask({
             agentName: agent.name,
@@ -461,6 +534,16 @@ async function runTelegramSwarm(promptText) {
       } else {
         const res = await backendCallAgent(agent, [{ role: 'user', content: accumulatedContext }])
         const agentResult = res.text
+
+        globalAgentStates[agentId] = 'done'
+        globalSwarmMessages.push({
+          agentId: agent.id,
+          agentName: agent.name,
+          role: agent.role,
+          content: agentResult,
+          type: 'text',
+          timestamp: new Date().toLocaleTimeString('th-TH')
+        })
 
         await sendTelegramMessage(`📄 **[${agent.name}]**:\n${agentResult}`)
 
@@ -476,11 +559,40 @@ async function runTelegramSwarm(promptText) {
       }
     } catch (err) {
       console.error(`Agent ${agent.name} failed:`, err)
+      globalAgentStates[agentId] = 'idle'
+      globalSwarmMessages.push({
+        agentId: agent.id,
+        agentName: agent.name,
+        role: agent.role,
+        content: `⚠️ เกิดข้อผิดพลาด: ${err.message}`,
+        type: 'text',
+        timestamp: new Date().toLocaleTimeString('th-TH')
+      })
       await sendTelegramMessage(`⚠️ **[${agent.name} Error]** เกิดข้อผิดพลาด: ${err.message}`)
     }
+
+    setTimeout(() => {
+      if (globalAgentStates[agentId] === 'done') {
+        globalAgentStates[agentId] = 'idle'
+      }
+    }, 4000)
   }
 
+  globalSwarmMessages.push({
+    agentId: 'ace',
+    agentName: 'Ace',
+    role: 'Orchestrator',
+    content: 'ทีม Pixel Office ทำงานเสร็จสิ้นทั้งหมดแล้ว บันทึกข้อมูลและรายงานผลเรียบร้อย! 🟢',
+    type: 'text',
+    timestamp: new Date().toLocaleTimeString('th-TH')
+  })
+
   await sendTelegramMessage(`✅ **[Ace]** ทีม Pixel Office ทำงานเสร็จสิ้นทั้งหมดแล้ว บันทึกข้อมูลและรายงานผลเรียบร้อย!`)
+
+  // Clear agent state bubbles after 6 seconds, but leave flow/messages intact so they can read them
+  setTimeout(() => {
+    globalAgentStates = {}
+  }, 6000)
 }
 
 app.post('/webhook/telegram', async (req, res) => {
