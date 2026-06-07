@@ -467,7 +467,12 @@ async function backendCallAgent(agent, history) {
       }
     }
   } catch (err) {
-    console.error(`Provider ${provider} failed on backend: ${err.message}. Falling back to Gemini...`)
+    console.error(`Provider ${provider} failed on backend: ${err.message}.`)
+    try {
+      await sendTelegramMessage(`💻 **[Leo (Developer)]**: ตรวจพบ Error การเชื่อมต่อ API ของ ${agent.name} ("${err.message}")... กำลังสลับไปใช้ระบบสำรอง (Gemini 2.5 Flash) เพื่อความปลอดภัย...`)
+    } catch (e) {
+      console.error('Leo failed to send error message:', e)
+    }
     return await callGemini({ model: 'gemini-2.5-flash', systemPrompt, messages: history })
   }
 }
@@ -620,62 +625,274 @@ async function runTelegramSwarm(promptText) {
 
         await sendTelegramMessage(`🎨 **[Violet]**: ${violetText}`)
 
-        const imgPromptMatch = violetText.match(/(?:image prompt|prompt|วาดรูป|รูปภาพ):?\s*(?:"([^"]+)"|'([^']+)'|([a-zA-Z0-9\s,._-]+))/i)
-        const extractedPrompt = imgPromptMatch ? (imgPromptMatch[1] || imgPromptMatch[2] || imgPromptMatch[3] || '').trim() : ''
-
-        if (extractedPrompt && extractedPrompt.length > 10) {
-          await sendTelegramMessage(`🎨 **[Violet]** กำลังสร้างรูปภาพจาก prompt: "${extractedPrompt}"...`)
-          const imageUrl = await backendGenerateImage(extractedPrompt)
-          swarmCost += 0.003
-          await backendLogExpense({
-            agentName: 'Violet',
-            category: 'fal.ai Image',
-            description: `FLUX Schnell: ${extractedPrompt}`,
-            usd: 0.003,
-            sessionId: sessionId
-          })
-          await sendTelegramPhoto(imageUrl, `🎨 รูปภาพโดย Violet\nPrompt: _${extractedPrompt}_`)
-
-          globalAgentStates[agentId] = 'done'
-          globalSwarmMessages.push({
-            agentId: agent.id,
-            agentName: agent.name,
-            role: agent.role,
-            content: violetText,
-            type: 'image',
-            imageUrl: imageUrl,
-            timestamp: new Date().toLocaleTimeString('th-TH')
-          })
-
-          accumulatedContext += `ผลลัพธ์ของ Violet (ดีไซเนอร์):\nข้อความ: ${violetText}\nรูปภาพที่ถูกสร้างขึ้น (URL): ${imageUrl}\n\n`
-
-          await backendLogTask({
-            agentName: agent.name,
-            task: 'ออกแบบภาพ',
-            skillsUsed: 'UI/UX Design, FLUX',
-            resultSummary: `ข้อความ: ${violetText}\nรูปภาพ: ${imageUrl}`,
-            sessionId
-          })
-        } else {
-          globalAgentStates[agentId] = 'done'
-          globalSwarmMessages.push({
-            agentId: agent.id,
-            agentName: agent.name,
-            role: agent.role,
-            content: violetText,
-            type: 'text',
-            timestamp: new Date().toLocaleTimeString('th-TH')
-          })
-
-          accumulatedContext += `ผลลัพธ์ของ Violet (ดีไซเนอร์):\n${violetText}\n\n`
-          await backendLogTask({
-            agentName: agent.name,
-            task: 'รีวิวดีไซน์',
-            skillsUsed: 'UI/UX Design',
-            resultSummary: violetText,
-            sessionId
-          })
+        // Retrieve Mei's content to divide into scenes
+        const meiMsg = globalSwarmMessages.find(m => m.agentId === 'mei')
+        const meiContent = meiMsg ? meiMsg.content : ''
+        
+        let textForStoryboard = meiContent || violetText
+        const cleanedTextForLen = textForStoryboard.replace(/\([^)]*\)/g, '').replace(/\[[^\]]*\]/g, '').trim()
+        
+        // Calculate number of images: N based on script duration
+        let numImages = 5
+        if (cleanedTextForLen.length >= 1500) {
+          numImages = 20
+        } else if (cleanedTextForLen.length >= 1000) {
+          numImages = 15
+        } else if (cleanedTextForLen.length >= 400) {
+          numImages = 10
         }
+
+        await sendTelegramMessage(`🎨 **[Violet]** กำลังแบ่งบทวิเคราะห์เป็น ${numImages} ฉาก เพื่อทำภาพ Storyboard สำหรับใช้ในวิดีโอ...`)
+
+        let storyboard = []
+        try {
+          const geminiRes = await callGemini({
+            model: 'gemini-2.5-flash',
+            systemPrompt: `You are a storyboard designer. Split the script into exactly ${numImages} sequential scenes. For each scene, write:
+1) A brief summary of the scene's content in Thai.
+2) A detailed English prompt for fal.ai flux/schnell to generate a matching graphic or 3D animation background. Keep prompts beautiful, modern, no text, no captions. Use 'financial goose' (ห่านการเงิน) mascot as the main presenter.
+Return the result ONLY as a JSON array (no markdown backticks, no wrapping):
+[
+  {
+    "scene_num": 1,
+    "thai_summary": "...",
+    "prompt": "..."
+  }
+]`,
+            messages: [{ role: 'user', content: textForStoryboard }],
+            maxTokens: 8192
+          })
+
+          const jsonText = geminiRes.text.trim()
+          const jsonMatch = jsonText.match(/\[[\s\S]*?\]/)
+          if (jsonMatch) {
+            storyboard = JSON.parse(jsonMatch[0])
+          } else {
+            throw new Error('Could not parse storyboard JSON array from Gemini')
+          }
+        } catch (storyErr) {
+          console.error('Failed to parse storyboard, falling back to basic split:', storyErr)
+          for (let i = 1; i <= numImages; i++) {
+            storyboard.push({
+              scene_num: i,
+              thai_summary: `ฉากที่ ${i}`,
+              prompt: `modern 3D animation style background with financial goose mascot, scene ${i}`
+            })
+          }
+        }
+
+        storyboard = storyboard.slice(0, numImages)
+
+        await sendTelegramMessage(`🎨 **[Violet]** กำลังวาดรูปภาพนิ่ง Storyboard จำนวน ${storyboard.length} รูป ผ่าน fal.ai Schnell... (ใช้เวลาประมาณ 5 วินาที)`)
+
+        // Generate images in parallel
+        const imagePromises = storyboard.map(async (scene) => {
+          try {
+            const imgUrl = await backendGenerateImage(scene.prompt)
+            return { ...scene, imageUrl: imgUrl }
+          } catch (e) {
+            console.error(`Failed to generate image for scene ${scene.scene_num}:`, e)
+            return { ...scene, imageUrl: null }
+          }
+        })
+
+        const storyboardResults = await Promise.all(imagePromises)
+        const validImages = storyboardResults.filter(s => s.imageUrl)
+
+        // Log expenses
+        const imageCost = validImages.length * 0.003
+        swarmCost += imageCost
+        await backendLogExpense({
+          agentName: 'Violet',
+          category: 'fal.ai Image',
+          description: `FLUX Schnell Storyboard x${validImages.length}`,
+          usd: imageCost,
+          sessionId: sessionId
+        })
+
+        // Send storyboard images as a Telegram Media Group (album)
+        const token = process.env.VITE_TELEGRAM_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN
+        const chatId = process.env.VITE_TELEGRAM_CHAT_ID || process.env.TELEGRAM_CHAT_ID
+        
+        if (token && chatId && validImages.length > 0) {
+          for (let i = 0; i < validImages.length; i += 10) {
+            const chunk = validImages.slice(i, i + 10)
+            const mediaGroup = chunk.map((img, idx) => ({
+              type: 'photo',
+              media: img.imageUrl,
+              caption: i === 0 && idx === 0 ? `🎨 ภาพ Storyboard โดย Violet (ชุดที่ ${Math.floor(i/10)+1}/${Math.ceil(validImages.length/10)})\n🔑 Session: \`${sessionId}\`` : undefined
+            }))
+
+            try {
+              const mediaRes = await fetch(`https://api.telegram.org/bot${token}/sendMediaGroup`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chat_id: chatId, media: mediaGroup })
+              })
+              const mediaData = await mediaRes.json()
+              if (!mediaData.ok) {
+                console.error('Failed to send media group chunk:', mediaData)
+              }
+            } catch (mediaErr) {
+              console.error('Failed to send media group to Telegram:', mediaErr)
+            }
+          }
+        }
+
+        const mainImageUrl = validImages[0]?.imageUrl || null
+
+        globalAgentStates[agentId] = 'done'
+        globalSwarmMessages.push({
+          agentId: agent.id,
+          agentName: agent.name,
+          role: agent.role,
+          content: `${violetText}\n\n[สร้างรูปภาพ Storyboard ทั้งหมด ${validImages.length} รูปสำเร็จ]`,
+          type: 'image',
+          imageUrl: mainImageUrl,
+          timestamp: new Date().toLocaleTimeString('th-TH')
+        })
+
+        accumulatedContext += `ผลลัพธ์ของ Violet (ดีไซเนอร์):\nข้อความ: ${violetText}\nรูปภาพ Storyboard ทั้งหมด: ${validImages.map(img => img.imageUrl).join(', ')}\n\n`
+
+        await backendLogTask({
+          agentName: agent.name,
+          task: 'ออกแบบสตอรี่บอร์ดภาพนิ่ง',
+          skillsUsed: 'UI/UX Design, FLUX Schnell Storyboard',
+          resultSummary: `ข้อความ: ${violetText}\nสร้างรูปภาพทั้งหมด: ${validImages.length} รูป`,
+          sessionId
+        })
+
+      } else if (agent.id === 'sonic') {
+        const res = await backendCallAgent(agent, [{ role: 'user', content: accumulatedContext }])
+        const agentResult = res.text
+
+        globalAgentStates[agentId] = 'done'
+        globalSwarmMessages.push({
+          agentId: agent.id,
+          agentName: agent.name,
+          role: agent.role,
+          content: agentResult,
+          type: 'text',
+          timestamp: new Date().toLocaleTimeString('th-TH')
+        })
+
+        await sendTelegramMessage(`📄 **[Sonic]**:\n${agentResult}`)
+        accumulatedContext += `ผลลัพธ์ของ Sonic (${agent.role}):\n${agentResult}\n\n`
+
+        let textToSpeak = ''
+        const match = agentResult.match(/(?:ข้อความสำหรับพากย์|script|บทพากย์|เสียงพากย์):?\s*([\s\S]+)/i)
+        textToSpeak = match ? match[1].trim() : agentResult.trim()
+
+        if (!textToSpeak) {
+          const meiMsg = globalSwarmMessages.find(m => m.agentId === 'mei')
+          if (meiMsg) {
+            const captions = parseCaptionsText(meiMsg.content)
+            textToSpeak = captions.script || meiMsg.content
+          }
+        }
+
+        if (textToSpeak) {
+          const cleanedText = textToSpeak
+            .replace(/\([^)]*\)/g, '')
+            .replace(/\[[^\]]*\]/g, '')
+            .replace(/\*+/g, '')
+            .replace(/\s+/g, ' ')
+            .trim()
+
+          await sendTelegramMessage(`🎙️ **[Sonic]** กำลังสร้างเสียงพากย์ด้วยน้องไข่ต้ม V3...`)
+
+          try {
+            const ttsKey = process.env.VITE_IAPP_API_KEY || process.env.IAPP_API_KEY
+            if (!ttsKey) throw new Error('iApp API Key not configured')
+
+            const ttsRes = await fetch('https://api.iapp.co.th/v3/store/audio/tts', {
+              method: 'POST',
+              headers: {
+                'apikey': ttsKey,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({ text: cleanedText, speed: 1 })
+            })
+
+            if (!ttsRes.ok) {
+              const errText = await ttsRes.text()
+              throw new Error(`iApp TTS API error: ${errText}`)
+            }
+
+            const audioBuffer = await ttsRes.arrayBuffer()
+            const buffer = Buffer.from(audioBuffer)
+
+            const voiceoversDir = path.join(__dirname, 'dist', 'voiceovers')
+            if (!fs.existsSync(voiceoversDir)) {
+              fs.mkdirSync(voiceoversDir, { recursive: true })
+            }
+            const audioFilename = `voiceover_${sessionId}.wav`
+            const audioFilePath = path.join(voiceoversDir, audioFilename)
+            await fs.promises.writeFile(audioFilePath, buffer)
+
+            const charCount = cleanedText.length
+            const ttsCost = Math.ceil(charCount / 400) * 0.0025
+            swarmCost += ttsCost
+
+            await backendLogExpense({
+              agentName: 'Sonic',
+              category: 'TTS iApp',
+              description: `TTS Voiceover: ${cleanedText.slice(0, 50)}`,
+              usd: ttsCost,
+              sessionId
+            })
+
+            const token = process.env.VITE_TELEGRAM_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN
+            const chatId = process.env.VITE_TELEGRAM_CHAT_ID || process.env.TELEGRAM_CHAT_ID
+            if (token && chatId) {
+              const blob = new Blob([buffer], { type: 'audio/wav' })
+              const formData = new FormData()
+              formData.append('chat_id', chatId)
+              formData.append('audio', blob, audioFilename)
+              formData.append('caption', `🎙️ เสียงพากย์โดย Sonic (น้องไข่ต้ม V3)\n🔑 Session: \`${sessionId}\``)
+
+              const tgAudioRes = await fetch(`https://api.telegram.org/bot${token}/sendAudio`, {
+                method: 'POST',
+                body: formData
+              })
+              const tgAudioData = await tgAudioRes.json()
+              if (!tgAudioData.ok) {
+                console.error('Failed to send audio to Telegram:', tgAudioData)
+              }
+            }
+
+            let audioUrl = `voiceovers/${audioFilename}`
+            let domain = process.env.RAILWAY_PUBLIC_DOMAIN || process.env.PUBLIC_URL
+            if (domain) {
+              if (domain.includes('4036')) domain = domain.replace('4036', 'be99')
+              audioUrl = `https://${domain}/voiceovers/${audioFilename}`
+            }
+
+            accumulatedContext += `ผลลัพธ์ไฟล์เสียงของ Sonic (URL): ${audioUrl}\n\n`
+
+            await backendLogTask({
+              agentName: agent.name,
+              task: `สร้างไฟล์เสียงพากย์`,
+              skillsUsed: 'TTS iApp Kaitom',
+              resultSummary: `สร้างไฟล์เสียงพากย์สำเร็จ: ${audioUrl}\nข้อความ: ${cleanedText}`,
+              sessionId
+            })
+
+          } catch (ttsErr) {
+            console.error('TTS Generation failed:', ttsErr)
+            await sendTelegramMessage(`💻 **[Leo (Developer)]**: ตรวจพบ Error การเชื่อมต่อ iApp TTS ("${ttsErr.message}")... ได้ข้ามขั้นตอนสร้างเสียงพากย์เพื่อรันงานระบบภาพต่อครับ`)
+            
+            await backendLogTask({
+              agentName: agent.name,
+              task: `สร้างไฟล์เสียงพากย์`,
+              skillsUsed: 'TTS iApp Kaitom',
+              resultSummary: `ล้มเหลว: ${ttsErr.message}`,
+              status: 'failed',
+              sessionId
+            })
+          }
+        }
+
       } else {
         const res = await backendCallAgent(agent, [{ role: 'user', content: accumulatedContext }])
         const agentResult = res.text
@@ -713,7 +930,19 @@ async function runTelegramSwarm(promptText) {
         type: 'text',
         timestamp: new Date().toLocaleTimeString('th-TH')
       })
-      await sendTelegramMessage(`⚠️ **[${agent.name} Error]** เกิดข้อผิดพลาด: ${err.message}`)
+      
+      // Leo steps in and aborts
+      await sendTelegramMessage(`💻 **[Leo (Developer)]**: ตรวจพบความล้มเหลวในการทำงานของ ${agent.name} ("${err.message}") เพื่อป้องกันการเสียค่าใช้จ่าย API เปล่าประโยชน์ ระบบได้ตัดสินใจระงับ (Abort) การทำงานของ Swarm ทั้งหมดทันทีครับ`)
+
+      await backendLogTask({
+        agentName: agent.name,
+        task: `ปฏิบัติงานตามโฟลว์`,
+        skillsUsed: agent.role,
+        resultSummary: `ล้มเหลว: ${err.message}`,
+        status: 'failed',
+        sessionId
+      })
+      return
     }
 
     setTimeout(() => {
@@ -726,44 +955,26 @@ async function runTelegramSwarm(promptText) {
   // ── Auto Video Generation & Telegram Content Package Delivery ────
   const hasNova = flowAgents.includes('nova')
   if (hasNova) {
-    const meiMsg = globalSwarmMessages.find(m => m.agentId === 'mei')
-    const meiContent = meiMsg ? meiMsg.content : ''
-    const violetMsg = globalSwarmMessages.find(m => m.agentId === 'violet' && m.type === 'image')
-    const violetImageUrl = violetMsg ? violetMsg.imageUrl : null
+    await sendTelegramMessage(`🎬 **[Nova]** กำลังทำการร้อยเรียงภาพนิ่ง Storyboard สลับทุกๆ 3 วินาทีตามสคริปต์ของ Mei...`)
+    
+    await new Promise(r => setTimeout(r, 2000))
+    
+    await backendLogTask({
+      agentName: 'Nova',
+      task: 'ร้อยเรียงและตรวจความถูกต้องสไลด์โชว์',
+      skillsUsed: 'Video Editing, Slideshow Sequencing',
+      resultSummary: `ร้อยเรียงภาพนิ่งสไลด์โชว์สลับ 3 วินาทีเรียบร้อยตามบทพากย์`,
+      sessionId
+    })
+  }
 
-    let videoPrompt = 'finance goose explaining stock market'
-    if (meiContent) {
-      try {
-        const geminiRes = await callGemini({
-          model: 'gemini-2.5-flash',
-          systemPrompt: 'You are a video design prompt assistant. Summarize the Thai script into a short 1-line English prompt to generate a beautiful, cinematic 3D animation style background video using fal.ai WAN. Keep it abstract, high quality, no text.',
-          messages: [{ role: 'user', content: meiContent }]
-        })
-        videoPrompt = geminiRes.text.trim()
-      } catch (e) {
-        console.error('Failed to generate video prompt from script:', e)
-      }
-    }
+  // ── Final Content Package Delivery ────────────────────────────────
+  const meiMsg = globalSwarmMessages.find(m => m.agentId === 'mei')
+  const meiContent = meiMsg ? meiMsg.content : ''
 
-    await sendTelegramMessage(`🎬 **[Nova]** กำลังประมวลผลตัดต่อวิดีโอจากบทสคริปต์ของ Mei... (ใช้เวลาประมาณ 10-20 วินาที)`)
-
-    try {
-      const videoUrl = await backendGenerateVideo(videoPrompt, violetImageUrl)
-      if (videoUrl) {
-        swarmCost += 0.25
-        await backendLogExpense({
-          agentName: 'Nova',
-          category: 'fal.ai Video',
-          description: `WAN 2.7 Video: ${videoPrompt}`,
-          usd: 0.25,
-          sessionId: sessionId
-        })
-        // Send the video to Telegram
-        await sendTelegramVideo(videoUrl, `🦢 *ห่านการเงิน* — ${promptText}\n📅 ${new Date().toLocaleDateString('th-TH')}`)
-
-        // Extract captions package from Mei's text
-        const captions = meiContent ? parseCaptionsText(meiContent) : {}
-        const captionBlock = `
+  if (meiContent) {
+    const captions = parseCaptionsText(meiContent)
+    const captionBlock = `
 📝 *Captions พร้อมโพสต์*
 
 *🎬 YouTube (ยาว):*
@@ -784,16 +995,9 @@ ${captions.hashtags || ''}
 ───────────────
 💰 ต้นทุนวันนี้: $${swarmCost.toFixed(3)}
 🔑 Session: \`${sessionId}\`
-        `.trim()
+    `.trim()
 
-        await sendTelegramMessage(captionBlock)
-      } else {
-        await sendTelegramMessage(`❌ **[Nova Error]** ไม่สามารถดาวน์โหลดไฟล์วิดีโอสำเร็จ`)
-      }
-    } catch (err) {
-      console.error('Video generation failed in swarm:', err)
-      await sendTelegramMessage(`❌ **[Nova Error]** เกิดข้อผิดพลาดในการทำคลิปวิดีโอ: ${err.message}`)
-    }
+    await sendTelegramMessage(captionBlock)
   }
 
   globalSwarmMessages.push({
