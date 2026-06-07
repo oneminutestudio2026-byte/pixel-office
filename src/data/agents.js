@@ -19,7 +19,7 @@ export const AGENTS = [
     tasks: { thinking: 'วางแผน...', typing: 'ประสานงานทีม', done: 'แจ้งทีมแล้ว ✓' },
     monitorColor: '#7C3AED',
     provider: 'openai',
-    model: 'gpt-5',
+    model: 'gpt-4o-mini',
     systemPrompt: `คุณคือ Ace หัวหน้าทีม AI ใน Pixel Office เป็นหมาน้อยใส่หูฟัง
 หน้าที่หลัก: รับคำสั่งจากผู้ใช้ วิเคราะห์งาน แล้วแบ่งงานให้ทีมที่เหมาะสมที่สุด
 
@@ -54,7 +54,7 @@ export const AGENTS = [
     tasks: { thinking: 'สเก็ตช์ไอเดีย...', typing: 'ออกแบบ UI', done: 'ดีไซน์เสร็จ ✓' },
     monitorColor: '#7C3AED',
     provider: 'anthropic',
-    model: 'claude-haiku-4-5-20251001',
+    model: 'claude-3-5-haiku-latest',
     systemPrompt: 'คุณคือ Violet นักออกแบบสร้างสรรค์ เป็นแมวสีชมพู ช่วยงาน design และ content ตอบภาษาไทยเป็นหลัก เมื่อผู้ใช้ขอให้สร้างภาพ วาดภาพ ออกแบบภาพ หรือต้องการเห็นภาพของอะไรก็ตาม ให้เรียกใช้ tool generate_image ทันที โดยสร้าง prompt ภาษาอังกฤษที่ละเอียด สวยงาม และมีรายละเอียดชัดเจน',
   },
   {
@@ -158,7 +158,7 @@ HASHTAGS: [20-30 hashtag ภาษาไทย+อังกฤษ]`,
     tasks: { thinking: 'คำนวณข้อมูล', typing: 'วิเคราะห์...', done: 'รายงานพร้อม ✓' },
     monitorColor: '#92400E',
     provider: 'anthropic',
-    model: 'claude-sonnet-4-5',
+    model: 'claude-3-5-sonnet-latest',
     systemPrompt: 'คุณคือ Charlie นักวิเคราะห์ข้อมูล เป็นลูกหมาใส่หูฟัง เชี่ยวชาญวิเคราะห์ข้อมูลและ trading ตอบภาษาไทยเป็นหลัก',
   },
   {
@@ -176,7 +176,7 @@ HASHTAGS: [20-30 hashtag ภาษาไทย+อังกฤษ]`,
     tasks: { thinking: 'ประเมินความเสี่ยง', typing: 'รีวิว...', done: 'อนุมัติ ✓' },
     monitorColor: '#7F1D1D',
     provider: 'anthropic',
-    model: 'claude-sonnet-4-5',
+    model: 'claude-3-5-sonnet-latest',
     systemPrompt: 'คุณคือ Coco ผู้อำนวยการด้านความเสี่ยง เป็นเสือใส่สูท ประเมิน risk และสรุปผล ตอบภาษาไทยเป็นหลัก',
   },
   {

@@ -133,7 +133,7 @@ async function sendTelegramMessage(text) {
   if (!token || !chatId) return
 
   try {
-    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+    const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -142,6 +142,18 @@ async function sendTelegramMessage(text) {
         parse_mode: 'Markdown'
       })
     })
+    const data = await res.json()
+    if (!data.ok) {
+      console.warn('[Telegram] First send failed (likely markdown error), retrying without markdown:', data.description)
+      await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: chatId,
+          text: text
+        })
+      })
+    }
   } catch (err) {
     console.error('Failed to send Telegram message:', err)
   }
@@ -153,7 +165,7 @@ async function sendTelegramPhoto(photoUrl, caption) {
   if (!token || !chatId) return
 
   try {
-    await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, {
+    const res = await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -163,6 +175,19 @@ async function sendTelegramPhoto(photoUrl, caption) {
         parse_mode: 'Markdown'
       })
     })
+    const data = await res.json()
+    if (!data.ok) {
+      console.warn('[Telegram] Photo send failed (likely markdown error), retrying without markdown:', data.description)
+      await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: chatId,
+          photo: photoUrl,
+          caption: caption
+        })
+      })
+    }
   } catch (err) {
     console.error('Failed to send Telegram photo:', err)
   }
