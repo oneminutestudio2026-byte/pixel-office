@@ -496,7 +496,10 @@ async function registerTelegramWebhook() {
     const res = await fetch(`https://api.telegram.org/bot${token}/setWebhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url: webhookUrl })
+      body: JSON.stringify({
+        url: webhookUrl,
+        allowed_updates: ['message', 'callback_query']
+      })
     })
     const data = await res.json()
     console.log('[Telegram Webhook] Registration result:', data)
@@ -505,7 +508,6 @@ async function registerTelegramWebhook() {
   }
 }
 
-// Serve static files from dist
 app.use(express.static(path.join(__dirname, 'dist')))
 
 // SPA fallback - all routes serve index.html
