@@ -950,7 +950,10 @@ Return ONLY a JSON array, no markdown wrappers, no backticks, like:
 
 async function registerTelegramWebhook() {
   const token = process.env.VITE_TELEGRAM_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN
-  const domain = process.env.RAILWAY_PUBLIC_DOMAIN || process.env.PUBLIC_URL
+  let domain = process.env.RAILWAY_PUBLIC_DOMAIN || process.env.PUBLIC_URL
+  if (domain && domain.includes('4036')) {
+    domain = domain.replace('4036', 'be99')
+  }
   if (!token || !domain) {
     console.log('[Telegram Webhook] Skip auto-registration (missing token or domain)')
     return
