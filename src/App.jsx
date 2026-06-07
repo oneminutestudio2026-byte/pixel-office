@@ -164,6 +164,37 @@ export default function App() {
     }
   }
 
+  // Load Notion finance summary when dashboard is shown
+  useEffect(() => {
+    if (showDashboard) {
+      const loadNotionFinance = async () => {
+        const summary = await getFinanceSummary()
+        if (summary) {
+          const byAgent = {}
+          for (const row of summary.recentRows) {
+            byAgent[row.agent] = (byAgent[row.agent] ?? 0) + row.usd
+          }
+          setCostSummary({
+            budget: 30,
+            spent: summary.totalUSD,
+            remaining: Math.max(0, 30 - summary.totalUSD),
+            pctUsed: Math.min(100, Math.round((summary.totalUSD / 30) * 100)),
+            byCategory: summary.byCategory,
+            byAgent,
+            entries: summary.recentRows.map(r => ({
+              ts: r.date,
+              category: r.category,
+              agentName: r.agent || 'System',
+              description: r.description,
+              usd: r.usd
+            })),
+          })
+        }
+      }
+      loadNotionFinance().catch(err => console.error('Failed to load finance from Notion:', err))
+    }
+  }, [showDashboard])
+
   // Poll background Telegram swarm state
   useEffect(() => {
     const intervalId = setInterval(async () => {
