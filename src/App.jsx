@@ -172,11 +172,15 @@ export default function App() {
         if (summary) {
           const byAgent = {}
           for (const row of summary.recentRows) {
-            byAgent[row.agent] = (byAgent[row.agent] ?? 0) + row.usd
+            if (row.type !== 'Income') {
+              byAgent[row.agent] = (byAgent[row.agent] ?? 0) + row.usd
+            }
           }
           setCostSummary({
             budget: 30,
             spent: summary.totalUSD,
+            revenue: summary.totalIncomeUSD || 0,
+            net: summary.netUSD || -summary.totalUSD,
             remaining: Math.max(0, 30 - summary.totalUSD),
             pctUsed: Math.min(100, Math.round((summary.totalUSD / 30) * 100)),
             byCategory: summary.byCategory,
@@ -186,7 +190,8 @@ export default function App() {
               category: r.category,
               agentName: r.agent || 'System',
               description: r.description,
-              usd: r.usd
+              usd: r.usd,
+              type: r.type || 'Expense'
             })),
           })
         }
@@ -326,13 +331,14 @@ export default function App() {
         getFinanceSummary('ห่านการเงิน'),
       ])
       const live = getSummary()
-      beanContext = `[ข้อมูลการเงินปัจจุบัน]
-งบเดือนนี้: $${live.budget} (~฿${toBaht(live.budget)})
-ใช้ไปแล้ว: $${live.spent} (~฿${toBaht(live.spent)}) = ${live.pctUsed}%
-เหลือ: $${live.remaining} (~฿${toBaht(live.remaining)})
-${Object.entries(live.byCategory).map(([k,v])=>`- ${k}: $${v.toFixed(4)}`).join('\n')}
-${allSummary ? `\nNotion (ทั้งหมด ${allSummary.count} รายการ): รวม $${allSummary.totalUSD} (~฿${allSummary.totalTHB})` : ''}
-${haanSummary ? `ห่านการเงินโปรเจค: $${haanSummary.totalUSD} (~฿${haanSummary.totalTHB})` : ''}`
+      beanContext = `[ข้อมูลการเงินปัจจุบันจาก Notion]
+- รายรับรวมทั้งหมด (Revenue): $${allSummary ? allSummary.totalIncomeUSD : 0} (~฿${allSummary ? allSummary.totalIncomeTHB.toLocaleString('th-TH') : 0})
+- รายจ่ายรวมทั้งหมด (Expenses): $${allSummary ? allSummary.totalUSD : 0} (~฿${allSummary ? allSummary.totalTHB.toLocaleString('th-TH') : 0})
+- กำไร/ขาดทุนสุทธิ (Net Profit): $${allSummary ? allSummary.netUSD : 0} (~฿${allSummary ? allSummary.netTHB.toLocaleString('th-TH') : 0})
+- งบประมาณค่าใช้จ่ายเดือนนี้: $${live.budget} (~฿${toBaht(live.budget)})
+- สถิติรายจ่ายแยกตามหมวดหมู่:
+${allSummary && allSummary.byCategory ? Object.entries(allSummary.byCategory).map(([k,v])=>`  * ${k}: $${v.toFixed(2)}`).join('\n') : '- ไม่มีประวัติ'}
+- ยอดจำนวนรายการธุรกรรมทั้งหมดในระบบ: ${allSummary ? allSummary.count : 0} รายการ`
     }
 
     const apiHistory = [...(messagesRef.current[agentId] || []), { role: 'user', content: text }]
@@ -894,20 +900,22 @@ ${haanSummary ? `ห่านการเงินโปรเจค: $${haanSum
                 {/* Budget Summary */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-white/5 p-4 rounded-2xl border border-white/5">
                   <div className="text-center">
-                    <div className="text-xs text-white/50">Spent (USD)</div>
-                    <div className="text-lg font-black text-emerald-400">${costSummary.spent}</div>
+                    <div className="text-xs text-white/50">Revenue / Income</div>
+                    <div className="text-lg font-black text-emerald-400">${(costSummary.revenue || 0).toFixed(2)}</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-xs text-white/50">Spent (Baht)</div>
-                    <div className="text-lg font-black text-emerald-400">~฿{toBaht(costSummary.spent)}</div>
+                    <div className="text-xs text-white/50">Expenses / Spent</div>
+                    <div className="text-lg font-black text-rose-400">${(costSummary.spent || 0).toFixed(2)}</div>
                   </div>
                   <div className="text-center">
-                    <div className="text-xs text-white/50">Budget</div>
-                    <div className="text-lg font-black text-amber-400">${costSummary.budget}</div>
+                    <div className="text-xs text-white/50">Net Profit</div>
+                    <div className={`text-lg font-black ${costSummary.net >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                      ${(costSummary.net || 0).toFixed(2)}
+                    </div>
                   </div>
                   <div className="text-center">
-                    <div className="text-xs text-white/50">Remaining</div>
-                    <div className="text-lg font-black text-blue-400">${costSummary.remaining}</div>
+                    <div className="text-xs text-white/50">Remaining Budget</div>
+                    <div className="text-lg font-black text-amber-400">${costSummary.remaining}</div>
                   </div>
                 </div>
 
@@ -970,7 +978,9 @@ ${haanSummary ? `ห่านการเงินโปรเจค: $${haanSum
                               </td>
                               <td className="p-2 text-white/80">{entry.category}</td>
                               <td className="p-2 text-white/60 truncate max-w-[160px]">{entry.description}</td>
-                              <td className="p-2 text-emerald-400 font-bold text-right">${entry.usd.toFixed(4)}</td>
+                              <td className={`p-2 font-bold text-right ${entry.type === 'Income' ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                {entry.type === 'Income' ? '+' : '-'}${entry.usd.toFixed(2)}
+                              </td>
                             </tr>
                           ))
                         )}

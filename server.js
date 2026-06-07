@@ -288,7 +288,7 @@ async function backendGenerateVideo(prompt, imageUrl = null) {
   throw new Error('Video generation timeout (60s)')
 }
 
-async function backendLogExpense({ agentName, category, description, usd, project = 'ห่านการเงิน', sessionId = '', notes = '' }) {
+async function backendLogExpense({ agentName, category, description, usd, project = 'ห่านการเงิน', sessionId = '', notes = '', type = 'Expense' }) {
   const key = process.env.VITE_NOTION_API_KEY || process.env.NOTION_API_KEY
   const dbId = process.env.VITE_FINANCE_DB_ID || process.env.FINANCE_DB_ID || '0c1477ded338419bb19a0ea239d758fd'
   if (!key) return
@@ -318,6 +318,7 @@ async function backendLogExpense({ agentName, category, description, usd, projec
           Status:           { select:    { name: 'recorded' } },
           'Session ID':     { rich_text: [{ text: { content: sessionId } }] },
           Notes:            { rich_text: [{ text: { content: notes } }] },
+          Type:             { select:    { name: type } },
         }
       })
     })
@@ -849,7 +850,7 @@ app.post('/webhook/telegram', async (req, res) => {
       const geminiApiKey = process.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY
       if (!geminiApiKey) throw new Error('Gemini API Key missing')
 
-      const prompt = `You are a CFO hamster named Bean. Analyze the receipt image. It may contain a collage of multiple credit card SMS alerts or bank transaction notifications. You MUST extract all transactions and categorize them.
+      const prompt = `You are a CFO hamster named Bean. Analyze the receipt image. It may contain a collage of multiple credit card SMS alerts or bank transaction notifications (both income and expense notifications). You MUST extract all transactions and categorize them.
 
 Here is the classification guide for AI/SaaS expenses:
 - Anthropic / Claude -> Category: 'Claude API'
@@ -862,13 +863,15 @@ Here is the classification guide for AI/SaaS expenses:
 - CapCut -> Category: 'CapCut'
 - TrueAIHub / OMISE*TRUEAIHUB -> Category: 'TrueAIHub'
 - Other SaaS/AI tools -> Category: 'Other AI Tools'
+- Income alerts (e.g. money received, transfers in, sponsorships) -> Category: 'Revenue'
 - Non-AI/Non-SaaS expenses -> Category: 'Other'
 
 For each transaction, extract:
-1. Short description of what was purchased (in English or Thai, e.g. "Google Storage 750 THB", "DeepSeek USD 5.30").
+1. Short description of what was purchased or received (in English or Thai, e.g. "Google Storage 750 THB", "Sponsorship Income 10000 THB").
 2. Total amount in USD. If the amount is in THB, convert to USD using rate 35 THB/USD.
 3. Category (must be one of the categories listed above).
-4. Notes (any interesting details, invoice number, date/time if visible).
+4. Type (must be 'Expense' or 'Income' depending on whether it is an expense or an income).
+5. Notes (any interesting details, invoice number, date/time if visible).
 
 Return ONLY a JSON array, no markdown wrappers, no backticks, like:
 [
@@ -876,6 +879,7 @@ Return ONLY a JSON array, no markdown wrappers, no backticks, like:
     "description": "...",
     "usd": 12.34,
     "category": "...",
+    "type": "Expense",
     "notes": "..."
   }
 ]`
@@ -928,16 +932,19 @@ Return ONLY a JSON array, no markdown wrappers, no backticks, like:
 
       const loggedItems = []
       for (const expense of expenses) {
+        const transactionType = expense.type || 'Expense'
         await backendLogExpense({
           agentName: 'Bean',
           category: expense.category || 'Other',
           description: expense.description || 'ใบเสร็จค่าใช้จ่าย',
           usd: Number(expense.usd || 0),
           notes: expense.notes || '',
+          type: transactionType,
           sessionId: `telegram_billing_${Date.now()}`
         })
         const thbAmount = Math.round(Number(expense.usd || 0) * 35 * 100) / 100
-        loggedItems.push(`- **${expense.description}**: $${Number(expense.usd).toFixed(2)} (~฿${thbAmount.toLocaleString('th-TH')}) [${expense.category}]`)
+        const typeEmoji = transactionType === 'Income' ? '🟢 [รายรับ]' : '🔴 [รายจ่าย]'
+        loggedItems.push(`- **${expense.description}**: $${Number(expense.usd).toFixed(2)} (~฿${thbAmount.toLocaleString('th-TH')}) ${typeEmoji} [${expense.category}]`)
       }
 
       await sendTelegramMessage(`🐹 **[Bean CFO]** ได้สแกนรูปภาพและบันทึกค่าใช้จ่ายลง Notion เรียบร้อยแล้วทั้งหมด **${expenses.length}** รายการค่ะ! 🎉\n\n📋 **รายการที่บันทึกบัญชี:**\n${loggedItems.join('\n')}`)

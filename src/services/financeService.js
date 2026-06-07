@@ -83,22 +83,34 @@ export async function getFinanceSummary(project = null) {
       description: p.properties['Description']?.rich_text?.[0]?.plain_text ?? '',
       usd:         p.properties['Amount USD']?.number ?? 0,
       thb:         p.properties['Amount THB']?.number ?? 0,
+      type:        p.properties['Type']?.select?.name ?? 'Expense',
     }))
 
     // สรุปตาม category
     const byCategory = {}
     const byProject  = {}
-    let totalUSD = 0
+    let totalIncomeUSD = 0
+    let totalExpenseUSD = 0
 
     for (const r of rows) {
-      byCategory[r.category] = (byCategory[r.category] ?? 0) + r.usd
-      byProject[r.project]   = (byProject[r.project]   ?? 0) + r.usd
-      totalUSD += r.usd
+      if (r.type === 'Income') {
+        totalIncomeUSD += r.usd
+      } else {
+        totalExpenseUSD += r.usd
+        byCategory[r.category] = (byCategory[r.category] ?? 0) + r.usd
+        byProject[r.project]   = (byProject[r.project]   ?? 0) + r.usd
+      }
     }
 
+    const netUSD = totalIncomeUSD - totalExpenseUSD
+
     return {
-      totalUSD:    parseFloat(totalUSD.toFixed(4)),
-      totalTHB:    Math.round(totalUSD * USD_TO_THB),
+      totalUSD:        parseFloat(totalExpenseUSD.toFixed(4)),
+      totalTHB:        Math.round(totalExpenseUSD * USD_TO_THB),
+      totalIncomeUSD:  parseFloat(totalIncomeUSD.toFixed(4)),
+      totalIncomeTHB:  Math.round(totalIncomeUSD * USD_TO_THB),
+      netUSD:          parseFloat(netUSD.toFixed(4)),
+      netTHB:          Math.round(netUSD * USD_TO_THB),
       byCategory,
       byProject,
       recentRows:  rows.slice(0, 10),
