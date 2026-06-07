@@ -822,8 +822,9 @@ app.post('/webhook/telegram', async (req, res) => {
   }
 
   const senderId = String(message.chat?.id)
-  if (chatId && senderId !== String(chatId)) {
-    console.warn(`[Telegram Webhook] Unauthorized message from chat ID ${senderId}`)
+  const allowedChatId = '8789851296'
+  if (senderId !== allowedChatId) {
+    console.warn(`[Telegram Webhook] Unauthorized message from chat ID ${senderId} (Expected ${allowedChatId})`)
     return res.status(200).send('Unauthorized')
   }
 
