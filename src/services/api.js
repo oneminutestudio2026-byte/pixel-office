@@ -35,7 +35,7 @@ async function callOpenAICompatible({ baseUrl, apiKey, model, systemPrompt, mess
 }
 
 // ── Google Gemini REST API ───────────────────────────────────────
-async function callGemini({ model, systemPrompt, messages, maxTokens = 1024 }) {
+async function callGemini({ model, systemPrompt, messages, maxTokens = 8192 }) {
   const apiKey = import.meta.env.VITE_GEMINI_API_KEY
   if (!apiKey) throw new Error('กรุณาตั้งค่า VITE_GEMINI_API_KEY ใน .env')
 

@@ -600,7 +600,7 @@ async function callOpenAICompatible({ baseUrl, apiKey, model, systemPrompt, mess
   }
 }
 
-async function callGemini({ model, systemPrompt, messages, maxTokens = 1024 }) {
+async function callGemini({ model, systemPrompt, messages, maxTokens = 8192 }) {
   const apiKey = process.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEY
   if (!apiKey) throw new Error('Gemini API key not configured')
 
