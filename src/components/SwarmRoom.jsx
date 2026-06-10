@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import AgentAvatar from './Avatars'
 import { getAgent } from '../data/agents'
 
-export default function SwarmRoom({ messages = [], activeFlow = [], agentStates = {}, onClose }) {
+export default function SwarmRoom({ messages = [], activeFlow = [], agentStates = {}, onClose, onClearSwarm }) {
   const chatEndRef = useRef(null)
 
   // Scroll to bottom when new messages arrive
@@ -12,6 +12,13 @@ export default function SwarmRoom({ messages = [], activeFlow = [], agentStates 
 
   // Check if any agent is currently busy (thinking/typing)
   const isSwarmActive = activeFlow.length > 0 && Object.values(agentStates).some(s => s === 'thinking' || s === 'typing')
+
+  function handleClearSwarmClick() {
+    const ok = window.confirm('คุณต้องการล้างข้อความแชทในห้องประชุม Swarm บนหน้าจอนี้หรือไม่? (ข้อมูลถาวรในระบบ/Notion จะยังคงอยู่)')
+    if (ok && onClearSwarm) {
+      onClearSwarm()
+    }
+  }
 
   return (
     <div className="flex flex-col h-full w-full" style={{ background: 'transparent' }}>
@@ -28,13 +35,22 @@ export default function SwarmRoom({ messages = [], activeFlow = [], agentStates 
             </span>
           </div>
         </div>
-        <button
-          onClick={onClose}
-          className="w-8 h-8 rounded-full flex items-center justify-center text-white/40 hover:text-white hover:bg-white/5 transition-all cursor-pointer"
-          title="ปิดหน้าห้องประชุม"
-        >
-          ×
-        </button>
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            onClick={handleClearSwarmClick}
+            title="ล้างแชทประชุม (Clear Swarm Chat)"
+            className="w-8 h-8 rounded-full flex items-center justify-center text-amber-200/60 hover:text-red-400 hover:bg-white/5 transition-colors text-sm cursor-pointer"
+          >
+            🗑️
+          </button>
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-full flex items-center justify-center text-white/40 hover:text-white hover:bg-white/5 transition-all cursor-pointer text-lg leading-none"
+            title="ปิดหน้าห้องประชุม"
+          >
+            ×
+          </button>
+        </div>
       </div>
 
       {/* Flow visualization bar */}

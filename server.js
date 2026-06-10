@@ -215,6 +215,14 @@ app.get('/api/swarm-state', (req, res) => {
   })
 })
 
+// Endpoint to clear global swarm states and messages
+app.post('/api/clear-swarm', (req, res) => {
+  globalSwarmMessages = []
+  globalActiveFlow = []
+  globalAgentStates = {}
+  res.json({ success: true })
+})
+
 // ── Telegram Webhook & LLM Swarm Orchestration ────────────────────
 
 async function sendTelegramMessage(text) {
@@ -626,45 +634,241 @@ async function callGemini({ model, systemPrompt, messages, maxTokens = 1024 }) {
   }
 }
 
+// Programmatic Math Function helper for Bean CFO
+function safeEvalMath(expression) {
+  const sanitized = expression.replace(/[^0-9+\-*/().\s]/g, '')
+  try {
+    const result = new Function(`return (${sanitized})`)()
+    return typeof result === 'number' && !isNaN(result) ? result : 0
+  } catch (e) {
+    return 0
+  }
+}
+
+// Centralized Tool Executor
+async function executeTool(name, args) {
+  console.log(`[Tool Registry] Executing tool: ${name} with args:`, args)
+  try {
+    switch (name) {
+      case 'notion_connector': {
+        const key = process.env.VITE_NOTION_API_KEY || process.env.NOTION_API_KEY
+        if (!key) return JSON.stringify({ error: 'Notion API key not configured' })
+        const { action, database_id, page_id, properties } = args
+        
+        if (action === 'read_db') {
+          const targetDb = database_id || process.env.FINANCE_DB_ID || '0c1477ded338419bb19a0ea239d758fd'
+          const res = await fetch(`https://api.notion.com/v1/databases/${targetDb}/query`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${key}`,
+              'Notion-Version': '2022-06-28',
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(args.query ? JSON.parse(args.query) : {})
+          })
+          const data = await res.json()
+          return JSON.stringify(data.results ? data.results.slice(0, 10).map(p => ({
+            id: p.id,
+            properties: p.properties
+          })) : data)
+        }
+        
+        if (action === 'write_db') {
+          const targetDb = database_id || process.env.FINANCE_DB_ID || '0c1477ded338419bb19a0ea239d758fd'
+          const res = await fetch(`https://api.notion.com/v1/pages`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${key}`,
+              'Notion-Version': '2022-06-28',
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              parent: { database_id: targetDb },
+              properties: properties ? JSON.parse(properties) : {}
+            })
+          })
+          const data = await res.json()
+          return JSON.stringify({ success: true, id: data.id })
+        }
+
+        if (action === 'update_page') {
+          if (!page_id) return JSON.stringify({ error: 'Missing page_id' })
+          const res = await fetch(`https://api.notion.com/v1/pages/${page_id}`, {
+            method: 'PATCH',
+            headers: {
+              'Authorization': `Bearer ${key}`,
+              'Notion-Version': '2022-06-28',
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ properties: properties ? JSON.parse(properties) : {} })
+          })
+          const data = await res.json()
+          return JSON.stringify({ success: true, id: data.id })
+        }
+        
+        return JSON.stringify({ error: `Unknown Notion action: ${action}` })
+      }
+      
+      case 'math_engine': {
+        const { formula } = args
+        if (!formula) return JSON.stringify({ error: 'Missing formula' })
+        const val = safeEvalMath(formula)
+        return JSON.stringify({ result: val })
+      }
+      
+      case 'web_harvester': {
+        const { action, query, url } = args
+        if (action === 'search') {
+          const res = await callGemini({
+            model: 'gemini-2.5-flash',
+            systemPrompt: 'You are a search assistant. Summarize recent news or trends for the given query using your knowledge base up to 2026. Keep it concise, professional, and factual.',
+            messages: [{ role: 'user', content: query || '' }]
+          })
+          return JSON.stringify({ summary: res.text })
+        }
+        if (action === 'scrape') {
+          if (!url) return JSON.stringify({ error: 'Missing url' })
+          try {
+            const fetchRes = await fetch(url)
+            const html = await fetchRes.text()
+            const cleanText = html
+              .replace(/<script[\s\S]*?<\/script>/gi, '')
+              .replace(/<style[\s\S]*?<\/style>/gi, '')
+              .replace(/<[^>]+>/g, ' ')
+              .replace(/\s+/g, ' ')
+              .trim()
+              .slice(0, 3000)
+            return JSON.stringify({ text: cleanText })
+          } catch (e) {
+            return JSON.stringify({ error: `Scraping failed: ${e.message}` })
+          }
+        }
+        return JSON.stringify({ error: `Unknown scraper action: ${action}` })
+      }
+      
+      case 'local_security_sandbox': {
+        const { action, filepath, content } = args
+        if (action === 'scan_file') {
+          if (!filepath) return JSON.stringify({ error: 'Missing filepath' })
+          const lowerContent = String(content || '').toLowerCase()
+          const suspicious = []
+          if (lowerContent.includes('eval(') || lowerContent.includes('new function')) suspicious.push('Dynamic Execution')
+          if (lowerContent.includes('child_process') || lowerContent.includes('exec(')) suspicious.push('Subprocess Execution')
+          if (lowerContent.includes('rm -rf') || lowerContent.includes('fs.rmdir')) suspicious.push('File Deletion Command')
+          
+          return JSON.stringify({
+            safe: suspicious.length === 0,
+            warnings: suspicious
+          })
+        }
+        return JSON.stringify({ error: `Unknown security action: ${action}` })
+      }
+      
+      default:
+        return JSON.stringify({ error: `Unknown tool: ${name}` })
+    }
+  } catch (err) {
+    return JSON.stringify({ error: `Tool execution failed: ${err.message}` })
+  }
+}
+
 async function backendCallAgent(agent, history) {
   const provider = agent.provider ?? 'anthropic'
   const model = agent.model
   const systemPrompt = agent.systemPrompt
 
-  try {
-    switch (provider) {
-      case 'openai': {
-        const apiKey = process.env.VITE_OPENAI_API_KEY || process.env.OPENAI_API_KEY
-        return await callOpenAICompatible({
-          baseUrl: 'https://api.openai.com/v1',
-          apiKey, model, systemPrompt, messages: history
-        })
-      }
-      case 'deepseek': {
-        const apiKey = process.env.VITE_DEEPSEEK_API_KEY || process.env.DEEPSEEK_API_KEY
-        return await callOpenAICompatible({
-          baseUrl: 'https://api.deepseek.com',
-          apiKey, model, systemPrompt, messages: history
-        })
-      }
-      case 'gemini': {
-        return await callGemini({ model, systemPrompt, messages: history })
-      }
-      case 'anthropic':
-      default: {
-        return await callAnthropic({ model, systemPrompt, messages: history })
-      }
-    }
-  } catch (err) {
-    console.error(`Provider ${provider} failed on backend: ${err.message}.`)
+  let loopCount = 0
+  const maxLoops = 3
+  let currentHistory = [...history]
+  let finalResult
+
+  while (loopCount < maxLoops) {
+    let result
     try {
-      await sendTelegramMessage(`💻 **[Leo (Developer)]**: ตรวจพบ Error การเชื่อมต่อ API ของ ${agent.name} ("${err.message}")... กำลังสลับไปใช้ระบบสำรอง (Gemini 2.5 Flash) เพื่อความปลอดภัย...`)
-    } catch (e) {
-      console.error('Leo failed to send error message:', e)
+      switch (provider) {
+        case 'deepseek': {
+          const apiKey = process.env.VITE_DEEPSEEK_API_KEY || process.env.DEEPSEEK_API_KEY
+          result = await callOpenAICompatible({
+            baseUrl: 'https://api.deepseek.com',
+            apiKey, model, systemPrompt, messages: currentHistory
+          })
+          break
+        }
+        case 'gemini': {
+          result = await callGemini({ model, systemPrompt, messages: currentHistory })
+          break
+        }
+        case 'anthropic':
+        default: {
+          result = await callAnthropic({ model, systemPrompt, messages: currentHistory })
+          break
+        }
+      }
+    } catch (err) {
+      console.error(`Provider ${provider} failed on backend: ${err.message}.`)
+      try {
+        await sendTelegramMessage(`💻 **[Leo (Developer)]**: ตรวจพบ Error การเชื่อมต่อ API ของ ${agent.name} ("${err.message}")... กำลังสลับไปใช้ระบบสำรอง (Gemini 2.5 Flash) เพื่อความปลอดภัย...`)
+      } catch (e) {
+        console.error('Leo failed to send error message:', e)
+      }
+      result = await callGemini({ model: 'gemini-2.5-flash', systemPrompt, messages: currentHistory })
     }
-    return await callGemini({ model: 'gemini-2.5-flash', systemPrompt, messages: history })
+
+    if (!result || typeof result.text !== 'string') {
+      return result
+    }
+
+    // Process legacy Bean math [CALC: ...] tags
+    if (agent.id === 'bean') {
+      result.text = result.text.replace(/\[CALC:\s*([^\]]+)\]/g, (match, expr) => {
+        const val = safeEvalMath(expr)
+        return val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      })
+    }
+
+    // Scan for centralized tool calls: <call_tool name="xxx">...</call_tool>
+    const toolRegex = /<call_tool\s+name="([^"]+)">([\s\S]*?)<\/call_tool>/i
+    const match = result.text.match(toolRegex)
+
+    if (match) {
+      const toolName = match[1].trim()
+      const innerContent = match[2]
+      
+      // Parse arguments: <arg name="xxx">value</arg>
+      const argRegex = /<arg\s+name="([^"]+)">([\s\S]*?)<\/arg>/gi
+      const args = {}
+      let argMatch
+      while ((argMatch = argRegex.exec(innerContent)) !== null) {
+        args[argMatch[1].trim()] = argMatch[2].trim()
+      }
+
+      // If args is empty and the inner content doesn't have <arg> tags, try to parse JSON or treat as single argument
+      if (Object.keys(args).length === 0 && innerContent.trim()) {
+        try {
+          Object.assign(args, JSON.parse(innerContent.trim()))
+        } catch (e) {
+          args.value = innerContent.trim()
+        }
+      }
+
+      await sendTelegramMessage(`⚙️ **[${agent.name}]** กำลังเรียกใช้คลังสกิลส่วนกลาง: \`${toolName}\`...`)
+      const toolResult = await executeTool(toolName, args)
+      
+      // Append tool call and result to history to let agent continue
+      currentHistory.push({ role: 'assistant', content: result.text })
+      currentHistory.push({ role: 'user', content: `[SYSTEM TOOL RESULT for ${toolName}]: ${toolResult}` })
+      
+      loopCount++
+      finalResult = result // update last known result
+    } else {
+      // No more tool calls, return final result
+      return result
+    }
   }
+
+  return finalResult
 }
+
 
 async function backendGenerateImage(prompt) {
   const key = process.env.VITE_FAL_KEY || process.env.FAL_KEY
@@ -988,84 +1192,96 @@ Return the result ONLY as a JSON array (no markdown backticks, no wrapping):
             .replace(/\s+/g, ' ')
             .trim()
 
-          await sendTelegramMessage(`🎙️ **[Sonic]** กำลังสร้างเสียงพากย์ด้วยน้องไข่ต้ม V3...`)
-
           try {
-            const ttsKey = process.env.VITE_IAPP_API_KEY || process.env.IAPP_API_KEY
-            if (!ttsKey) throw new Error('iApp API Key not configured')
-
-            const ttsRes = await fetch('https://api.iapp.co.th/v3/store/audio/tts', {
-              method: 'POST',
-              headers: {
-                'apikey': ttsKey,
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify({ text: cleanedText, speed: 1 })
-            })
-
-            if (!ttsRes.ok) {
-              const errText = await ttsRes.text()
-              throw new Error(`iApp TTS API error: ${errText}`)
-            }
-
-            const audioBuffer = await ttsRes.arrayBuffer()
-            const buffer = Buffer.from(audioBuffer)
-
-            const voiceoversDir = path.join(__dirname, 'dist', 'voiceovers')
-            if (!fs.existsSync(voiceoversDir)) {
-              fs.mkdirSync(voiceoversDir, { recursive: true })
-            }
-            const audioFilename = `voiceover_${sessionId}.wav`
-            const audioFilePath = path.join(voiceoversDir, audioFilename)
-            await fs.promises.writeFile(audioFilePath, buffer)
-
-            const charCount = cleanedText.length
-            const ttsCost = Math.ceil(charCount / 400) * 0.0025
-            swarmCost += ttsCost
-
-            await backendLogExpense({
-              agentName: 'Sonic',
-              category: 'TTS iApp',
-              description: `TTS Voiceover: ${cleanedText.slice(0, 50)}`,
-              usd: ttsCost,
-              sessionId
-            })
-
-            const token = process.env.VITE_TELEGRAM_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN
-            const chatId = process.env.VITE_TELEGRAM_CHAT_ID || process.env.TELEGRAM_CHAT_ID
-            if (token && chatId) {
-              const blob = new Blob([buffer], { type: 'audio/wav' })
-              const formData = new FormData()
-              formData.append('chat_id', chatId)
-              formData.append('audio', blob, audioFilename)
-              formData.append('caption', `🎙️ เสียงพากย์โดย Sonic (น้องไข่ต้ม V3)\n🔑 Session: \`${sessionId}\``)
-
-              const tgAudioRes = await fetch(`https://api.telegram.org/bot${token}/sendAudio`, {
-                method: 'POST',
-                body: formData
+            const isTrialRun = process.env.TRIAL_RUN !== 'false'
+            if (isTrialRun) {
+              await sendTelegramMessage(`🎙️ **[Sonic]** [โหมดรันทดลอง] ข้ามขั้นตอนสร้างไฟล์เสียงจริงผ่าน iApp TTS เพื่อประหยัด Token`)
+              await backendLogTask({
+                agentName: agent.name,
+                task: `สร้างไฟล์เสียงพากย์`,
+                skillsUsed: 'TTS iApp Kaitom (Trial Mode)',
+                resultSummary: `ข้ามขั้นตอนเสียงพากย์จริงในโหมดรันทดลอง: (ข้อความสำหรับพากย์: ${cleanedText.slice(0, 80)}...)`,
+                sessionId
               })
-              const tgAudioData = await tgAudioRes.json()
-              if (!tgAudioData.ok) {
-                console.error('Failed to send audio to Telegram:', tgAudioData)
+            } else {
+              await sendTelegramMessage(`🎙️ **[Sonic]** กำลังสร้างเสียงพากย์ด้วยน้องไข่ต้ม V3...`)
+
+              const ttsKey = process.env.VITE_IAPP_API_KEY || process.env.IAPP_API_KEY
+              if (!ttsKey) throw new Error('iApp API Key not configured')
+
+              const ttsRes = await fetch('https://api.iapp.co.th/v3/store/audio/tts', {
+                method: 'POST',
+                headers: {
+                  'apikey': ttsKey,
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ text: cleanedText, speed: 1 })
+              })
+
+              if (!ttsRes.ok) {
+                const errText = await ttsRes.text()
+                throw new Error(`iApp TTS API error: ${errText}`)
               }
+
+              const audioBuffer = await ttsRes.arrayBuffer()
+              const buffer = Buffer.from(audioBuffer)
+
+              const voiceoversDir = path.join(__dirname, 'dist', 'voiceovers')
+              if (!fs.existsSync(voiceoversDir)) {
+                fs.mkdirSync(voiceoversDir, { recursive: true })
+              }
+              const audioFilename = `voiceover_${sessionId}.wav`
+              const audioFilePath = path.join(voiceoversDir, audioFilename)
+              await fs.promises.writeFile(audioFilePath, buffer)
+
+              const charCount = cleanedText.length
+              const ttsCost = Math.ceil(charCount / 400) * 0.0025
+              swarmCost += ttsCost
+
+              await backendLogExpense({
+                agentName: 'Sonic',
+                category: 'TTS iApp',
+                description: `TTS Voiceover: ${cleanedText.slice(0, 50)}`,
+                usd: ttsCost,
+                sessionId
+              })
+
+              const token = process.env.VITE_TELEGRAM_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN
+              const chatId = process.env.VITE_TELEGRAM_CHAT_ID || process.env.TELEGRAM_CHAT_ID
+              if (token && chatId) {
+                const blob = new Blob([buffer], { type: 'audio/wav' })
+                const formData = new FormData()
+                formData.append('chat_id', chatId)
+                formData.append('audio', blob, audioFilename)
+                formData.append('caption', `🎙️ เสียงพากย์โดย Sonic (น้องไข่ต้ม V3)\n🔑 Session: \`${sessionId}\``)
+
+                const tgAudioRes = await fetch(`https://api.telegram.org/bot${token}/sendAudio`, {
+                  method: 'POST',
+                  body: formData
+                })
+                const tgAudioData = await tgAudioRes.json()
+                if (!tgAudioData.ok) {
+                  console.error('Failed to send audio to Telegram:', tgAudioData)
+                }
+              }
+
+              let audioUrl = `voiceovers/${audioFilename}`
+              let domain = process.env.RAILWAY_PUBLIC_DOMAIN || process.env.PUBLIC_URL
+              if (domain) {
+                if (domain.includes('4036')) domain = domain.replace('4036', 'be99')
+                audioUrl = `https://${domain}/voiceovers/${audioFilename}`
+              }
+
+              accumulatedContext += `ผลลัพธ์ไฟล์เสียงของ Sonic (URL): ${audioUrl}\n\n`
+
+              await backendLogTask({
+                agentName: agent.name,
+                task: `สร้างไฟล์เสียงพากย์`,
+                skillsUsed: 'TTS iApp Kaitom',
+                resultSummary: `สร้างไฟล์เสียงพากย์สำเร็จ: ${audioUrl}\nข้อความ: ${cleanedText}`,
+                sessionId
+              })
             }
-
-            let audioUrl = `voiceovers/${audioFilename}`
-            let domain = process.env.RAILWAY_PUBLIC_DOMAIN || process.env.PUBLIC_URL
-            if (domain) {
-              if (domain.includes('4036')) domain = domain.replace('4036', 'be99')
-              audioUrl = `https://${domain}/voiceovers/${audioFilename}`
-            }
-
-            accumulatedContext += `ผลลัพธ์ไฟล์เสียงของ Sonic (URL): ${audioUrl}\n\n`
-
-            await backendLogTask({
-              agentName: agent.name,
-              task: `สร้างไฟล์เสียงพากย์`,
-              skillsUsed: 'TTS iApp Kaitom',
-              resultSummary: `สร้างไฟล์เสียงพากย์สำเร็จ: ${audioUrl}\nข้อความ: ${cleanedText}`,
-              sessionId
-            })
 
           } catch (ttsErr) {
             console.error('TTS Generation failed:', ttsErr)
@@ -1144,65 +1360,77 @@ Return the result ONLY as a JSON array (no markdown backticks, no wrapping):
   // ── Auto Video Generation & Telegram Content Package Delivery ────
   const hasNova = flowAgents.includes('nova')
   if (hasNova) {
-    await sendTelegramMessage(`🎬 **[Nova]** กำลังทำการร้อยเรียงภาพนิ่ง Storyboard สลับทุกๆ 3 วินาทีตามสคริปต์ของ Mei...`)
-    
-    await new Promise(r => setTimeout(r, 2000))
-    
-    await backendLogTask({
-      agentName: 'Nova',
-      task: 'ร้อยเรียงและตรวจความถูกต้องสไลด์โชว์',
-      skillsUsed: 'Video Editing, Slideshow Sequencing',
-      resultSummary: `ร้อยเรียงภาพนิ่งสไลด์โชว์สลับ 3 วินาทีเรียบร้อยตามบทพากย์`,
-      sessionId
-    })
+    const isTrialRun = process.env.TRIAL_RUN !== 'false'
+    if (isTrialRun) {
+      await sendTelegramMessage(`🎬 **[Nova]** [โหมดรันทดลอง] ข้ามขั้นตอนสร้างสไลด์โชว์วิดีโอและไฟล์ซับไตเติล .srt เพื่อประหยัด Token`)
+      await backendLogTask({
+        agentName: 'Nova',
+        task: 'ร้อยเรียงวิดีโอและทำซับไตเติล',
+        skillsUsed: 'Video Editing & Subtitling (Trial Mode)',
+        resultSummary: `ข้ามขั้นตอนตัดต่อวิดีโอและซับไตเติลจริงในโหมดรันทดลอง`,
+        sessionId
+      })
+    } else {
+      await sendTelegramMessage(`🎬 **[Nova]** กำลังทำการร้อยเรียงภาพนิ่ง Storyboard สลับทุกๆ 3 วินาทีตามสคริปต์ของ Mei...`)
+      
+      await new Promise(r => setTimeout(r, 2000))
+      
+      await backendLogTask({
+        agentName: 'Nova',
+        task: 'ร้อยเรียงและตรวจความถูกต้องสไลด์โชว์',
+        skillsUsed: 'Video Editing, Slideshow Sequencing',
+        resultSummary: `ร้อยเรียงภาพนิ่งสไลด์โชว์สลับ 3 วินาทีเรียบร้อยตามบทพากย์`,
+        sessionId
+      })
 
-    // Generate SRT file
-    const meiMsg = globalSwarmMessages.find(m => m.agentId === 'mei')
-    const meiContent = meiMsg ? meiMsg.content : ''
-    if (meiContent) {
-      await sendTelegramMessage(`🎬 **[Nova]** กำลังสร้างไฟล์ซับไตเติล .srt สำหรับนำเข้า CapCut...`)
-      try {
-        const geminiRes = await callGemini({
-          model: 'gemini-2.5-flash',
-          systemPrompt: `You are a subtitle editor. Given this Thai voiceover script, generate a valid SubRip (.srt) subtitle file.
-Divide the script into sequential segments of roughly 3 to 5 seconds each.
-Assume a standard reading speed in Thai (approx 8-10 characters per second including spaces) to calculate start and end times sequentially.
-Return ONLY the raw SRT subtitle content. No markdown backticks, no wrapping.`,
-          messages: [{ role: 'user', content: meiContent }],
-          maxTokens: 8192
-        })
+      // Generate SRT file
+      const meiMsg = globalSwarmMessages.find(m => m.agentId === 'mei')
+      const meiContent = meiMsg ? meiMsg.content : ''
+      if (meiContent) {
+        await sendTelegramMessage(`🎬 **[Nova]** กำลังสร้างไฟล์ซับไตเติล .srt สำหรับนำเข้า CapCut...`)
+        try {
+          const geminiRes = await callGemini({
+            model: 'gemini-2.5-flash',
+            systemPrompt: `You are a subtitle editor. Given this Thai voiceover script, generate a valid SubRip (.srt) subtitle file.
+  Divide the script into sequential segments of roughly 3 to 5 seconds each.
+  Assume a standard reading speed in Thai (approx 8-10 characters per second including spaces) to calculate start and end times sequentially.
+  Return ONLY the raw SRT subtitle content. No markdown backticks, no wrapping.`,
+            messages: [{ role: 'user', content: meiContent }],
+            maxTokens: 8192
+          })
 
-        const srtContent = geminiRes.text.trim().replace(/^```[a-z]*\n/i, '').replace(/\n```$/i, '')
-        const srtBuffer = Buffer.from(srtContent, 'utf-8')
+          const srtContent = geminiRes.text.trim().replace(/^```[a-z]*\n/i, '').replace(/\n```$/i, '')
+          const srtBuffer = Buffer.from(srtContent, 'utf-8')
 
-        const voiceoversDir = path.join(__dirname, 'dist', 'voiceovers')
-        if (!fs.existsSync(voiceoversDir)) {
-          fs.mkdirSync(voiceoversDir, { recursive: true })
+          const voiceoversDir = path.join(__dirname, 'dist', 'voiceovers')
+          if (!fs.existsSync(voiceoversDir)) {
+            fs.mkdirSync(voiceoversDir, { recursive: true })
+          }
+          const srtFilename = `subtitles_${sessionId}.srt`
+          const srtFilePath = path.join(voiceoversDir, srtFilename)
+          await fs.promises.writeFile(srtFilePath, srtBuffer)
+
+          // Send SRT to Telegram
+          await sendTelegramDocument(srtBuffer, srtFilename, `🎬 ไฟล์ซับไตเติลสำหรับนำเข้า CapCut (.srt)\n🔑 Session: \`${sessionId}\``)
+
+          let srtUrl = `voiceovers/${srtFilename}`
+          let domain = process.env.RAILWAY_PUBLIC_DOMAIN || process.env.PUBLIC_URL
+          if (domain) {
+            if (domain.includes('4036')) domain = domain.replace('4036', 'be99')
+            srtUrl = `https://${domain}/voiceovers/${srtFilename}`
+          }
+
+          await backendLogTask({
+            agentName: 'Nova',
+            task: 'สร้างไฟล์คำบรรยาย SRT',
+            skillsUsed: 'Subtitle Generation',
+            resultSummary: `สร้างไฟล์ซับไตเติล SRT สำเร็จ: ${srtUrl}`,
+            sessionId
+          })
+        } catch (srtErr) {
+          console.error('Failed to generate SRT:', srtErr)
+          await sendTelegramMessage(`💻 **[Leo (Developer)]**: ตรวจพบ Error การทำไฟล์คำบรรยาย .srt ("${srtErr.message}")... ได้ข้ามขั้นตอนนี้เพื่อจัดส่งงานส่วนอื่นให้คุณ J ครับ`)
         }
-        const srtFilename = `subtitles_${sessionId}.srt`
-        const srtFilePath = path.join(voiceoversDir, srtFilename)
-        await fs.promises.writeFile(srtFilePath, srtBuffer)
-
-        // Send SRT to Telegram
-        await sendTelegramDocument(srtBuffer, srtFilename, `🎬 ไฟล์ซับไตเติลสำหรับนำเข้า CapCut (.srt)\n🔑 Session: \`${sessionId}\``)
-
-        let srtUrl = `voiceovers/${srtFilename}`
-        let domain = process.env.RAILWAY_PUBLIC_DOMAIN || process.env.PUBLIC_URL
-        if (domain) {
-          if (domain.includes('4036')) domain = domain.replace('4036', 'be99')
-          srtUrl = `https://${domain}/voiceovers/${srtFilename}`
-        }
-
-        await backendLogTask({
-          agentName: 'Nova',
-          task: 'สร้างไฟล์คำบรรยาย SRT',
-          skillsUsed: 'Subtitle Generation',
-          resultSummary: `สร้างไฟล์ซับไตเติล SRT สำเร็จ: ${srtUrl}`,
-          sessionId
-        })
-      } catch (srtErr) {
-        console.error('Failed to generate SRT:', srtErr)
-        await sendTelegramMessage(`💻 **[Leo (Developer)]**: ตรวจพบ Error การทำไฟล์คำบรรยาย .srt ("${srtErr.message}")... ได้ข้ามขั้นตอนนี้เพื่อจัดส่งงานส่วนอื่นให้คุณ J ครับ`)
       }
     }
   }
@@ -1253,6 +1481,7 @@ ${captions.hashtags || ''}
   // Clear agent state bubbles after 6 seconds, but leave flow/messages intact so they can read them
   setTimeout(() => {
     globalAgentStates = {}
+    globalActiveFlow = []
   }, 6000)
 }
 

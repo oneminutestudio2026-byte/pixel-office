@@ -29,24 +29,20 @@ function parseCaptions(meiReply) {
   }
 }
 
-// ── Orchestration helpers ─────────────────────────────────────────
-// เลือก 2-3 agent ที่เกี่ยวข้องที่สุด (ประหยัด token)
 function getOrchestratorFlow(task) {
   const kw = task.toLowerCase()
   if (kw.includes('ออกแบบ') || kw.includes('design') || kw.includes('ui') || kw.includes('หน้าตา'))
-    return ['violet', 'mei', 'coco']
+    return ['violet', 'mei', 'luna']
   if (kw.includes('เขียน') || kw.includes('content') || kw.includes('script') || kw.includes('caption'))
-    return ['mei', 'violet', 'charlie']
+    return ['sparky', 'mei', 'violet']
   if (kw.includes('โค้ด') || kw.includes('code') || kw.includes('build') || kw.includes('เว็บ'))
-    return ['luna', 'leo', 'charlie']
+    return ['luna', 'leo', 'arlo']
   if (kw.includes('security') || kw.includes('ความปลอดภัย') || kw.includes('ตรวจ'))
-    return ['arlo', 'charlie', 'coco']
-  if (kw.includes('risk') || kw.includes('ความเสี่ยง') || kw.includes('วิเคราะห์'))
-    return ['coco', 'charlie', 'arlo']
-  if (kw.includes('trading') || kw.includes('หุ้น') || kw.includes('ข้อมูล'))
-    return ['charlie', 'coco', 'arlo']
+    return ['arlo', 'leo', 'luna']
+  if (kw.includes('ข่าว') || kw.includes('เทรนด์') || kw.includes('ข้อมูล'))
+    return ['sparky', 'mei', 'arlo']
   // default: ทีมหลัก 3 คน
-  return ['violet', 'mei', 'luna']
+  return ['sparky', 'mei', 'violet']
 }
 
 
@@ -94,8 +90,9 @@ function ChatPlaceholder({ onSelect }) {
 
         {/* Model info */}
         <div className="text-center space-y-1" style={{ color: 'rgba(255,255,255,0.25)', fontSize: '10px' }}>
-          <p>Ace · Charlie · Coco → claude-sonnet-4-5</p>
-          <p>Others → claude-haiku-4-5</p>
+          <p>H.Ace · H.Violet · H.Coco · H.Bean → deepseek-chat</p>
+          <p>H.Luna · H.Leo · H.Arlo → claude-3-5-sonnet-20241022</p>
+          <p>Mei · Charlie · Sonic · Nova · Sparky → gemini-2.5-flash</p>
         </div>
       </div>
     </div>
@@ -122,6 +119,7 @@ export default function App() {
   const [clearingAllLogs, setClearingAllLogs] = useState(false)
   const [showSwarmRoom, setShowSwarmRoom] = useState(false)
   const [swarmMessages, setSwarmMessages] = useState([])
+  const [clearedAgents, setClearedAgents] = useState(() => new Set())
 
 
   const handleClearAllMemory = async () => {
@@ -232,6 +230,7 @@ export default function App() {
             }
             return prev
           })
+          setSwarmMessages(data.messages || [])
         }
       } catch (err) {
         // Ignore background polling errors
@@ -246,13 +245,24 @@ export default function App() {
     const agent = getAgent(agentId)
     if (!agent) return
 
+    if (clearedAgents.has(agentId)) return
     if (messagesRef.current[agentId] && messagesRef.current[agentId].length > 0) return
 
     setLoadingHistory(prev => ({ ...prev, [agentId]: true }))
     try {
       const logs = await getRecentLogs({ agentName: agent.name, limit: 10 })
       
-      const chatMessages = logs.reverse().flatMap(log => {
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+
+      const chatMessages = logs
+        .filter(log => {
+          if (!log.timestamp) return false
+          const logDate = new Date(log.timestamp)
+          return logDate >= today
+        })
+        .reverse()
+        .flatMap(log => {
         const msgs = []
         if (log.task) {
           msgs.push({ role: 'user', content: log.task, type: 'text' })
@@ -282,7 +292,7 @@ export default function App() {
     } finally {
       setLoadingHistory(prev => ({ ...prev, [agentId]: false }))
     }
-  }, [])
+  }, [clearedAgents])
 
   useEffect(() => {
     if (selectedAgent) {
@@ -290,19 +300,16 @@ export default function App() {
     }
   }, [selectedAgent, loadHistory])
 
-  const handleClearMemory = useCallback(async (agentId) => {
-    const agent = getAgent(agentId)
-    if (!agent) return
-
-    try {
-      await clearNotionLogs(agent.name)
-      setMessages(prev => ({
-        ...prev,
-        [agentId]: [],
-      }))
-    } catch (err) {
-      console.error('Failed to clear memory in Notion:', err)
-    }
+  const handleClearMemory = useCallback((agentId) => {
+    setClearedAgents(prev => {
+      const next = new Set(prev)
+      next.add(agentId)
+      return next
+    })
+    setMessages(prev => ({
+      ...prev,
+      [agentId]: [],
+    }))
   }, [])
 
   // sessionId: ใช้ระบุ session ใน Notion log
@@ -322,6 +329,12 @@ export default function App() {
   const handleSend = useCallback(async (agentId, text) => {
     const agent = getAgent(agentId)
     if (!agent) return
+
+    setClearedAgents(prev => {
+      const next = new Set(prev)
+      next.delete(agentId)
+      return next
+    })
 
     // ── Bean: ดึงข้อมูลจาก Notion Finance DB ก่อนตอบ ────────────
     let beanContext = ''
@@ -775,18 +788,24 @@ ${allSummary && allSummary.byCategory ? Object.entries(allSummary.byCategory).ma
                   <button
                     key={agent.id}
                     onClick={() => handleCharacterClick(agent.id)}
-                    className="flex items-center gap-2 px-3 py-1.5 rounded-full transition-all hover:scale-105 active:scale-95 text-left cursor-pointer"
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-2xl transition-all hover:scale-105 active:scale-95 text-left cursor-pointer"
                     style={{
                       background: isAgentActive ? `${agent.color}35` : 'rgba(255,255,255,0.04)',
-                      border: `1px solid ${isAgentActive ? agent.color + '70' : 'rgba(255,255,255,0.06)'}`,
+                      border: `1px solid ${isAgentActive ? agent.color + '90' : 'rgba(255,255,255,0.06)'}`,
+                      boxShadow: isAgentActive ? `0 0 10px 1px ${agent.color}dd` : 'none',
                     }}
                   >
                     <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${state !== 'idle' ? 'animate-pulse' : ''}`}
                       style={{ background: stateColor[state] }}/>
-                    <span className="font-bold text-xs truncate" style={{ color: agent.color }}>
-                      {agent.name}
-                    </span>
-                    <span className="text-[10px] shrink-0" style={{ color: stateColor[state] }}>
+                    <div className="flex flex-col min-w-0">
+                      <span className="font-bold text-xs truncate" style={{ color: agent.color }}>
+                        {agent.hasHermes ? `H.${agent.name}` : agent.name}
+                      </span>
+                      <span className="text-[8px] text-white/45 leading-tight truncate">
+                        {agent.role} · {agent.model}
+                      </span>
+                    </div>
+                    <span className="text-[10px] shrink-0 ml-auto" style={{ color: stateColor[state] }}>
                       {stateLabel[state]}
                     </span>
                   </button>
@@ -846,6 +865,14 @@ ${allSummary && allSummary.byCategory ? Object.entries(allSummary.byCategory).ma
                     activeFlow={activeFlow}
                     agentStates={agentStates}
                     onClose={handleClose}
+                    onClearSwarm={async () => {
+                      setSwarmMessages([])
+                      try {
+                        await fetch('/api/clear-swarm', { method: 'POST' })
+                      } catch (err) {
+                        console.error('Failed to clear backend swarm messages:', err)
+                      }
+                    }}
                   />
                 </motion.div>
               ) : (

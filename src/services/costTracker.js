@@ -5,9 +5,11 @@ export const RATES = {
   // Anthropic
   'claude-sonnet-4-5':        { input: 3.00,  output: 15.00,  unit: 'per MTok' },
   'claude-haiku-4-5-20251001':{ input: 0.80,  output: 4.00,   unit: 'per MTok' },
-  // OpenAI
-  'gpt-5':                    { input: 1.25,  output: 10.00,  unit: 'per MTok' },
-  'gpt-4o':                   { input: 2.50,  output: 10.00,  unit: 'per MTok' },
+  'claude-3-5-sonnet-latest': { input: 3.00,  output: 15.00,  unit: 'per MTok' },
+  'claude-3-5-sonnet-20241022': { input: 3.00,  output: 15.00,  unit: 'per MTok' },
+  'claude-3-5-sonnet-20240620': { input: 3.00,  output: 15.00,  unit: 'per MTok' },
+  'claude-3-5-haiku-latest':  { input: 0.25,  output: 1.25,   unit: 'per MTok' },
+  'claude-3-5-haiku-20241022':  { input: 0.25,  output: 1.25,   unit: 'per MTok' },
   // DeepSeek
   'deepseek-chat':            { input: 0.14,  output: 0.28,   unit: 'per MTok' },
   // Google Gemini
@@ -16,7 +18,9 @@ export const RATES = {
   // Media
   'fal-image':                { cost: 0.005,  unit: 'per image' },
   'fal-video-seedance':       { cost: 0.060,  unit: 'per second' },
+  'fal-video-seedance-2':     { cost: 0.060,  unit: 'per second' },
   'fal-video-wan':            { cost: 0.050,  unit: 'per second' },
+  'fal-video-wan-2.7':        { cost: 0.050,  unit: 'per second' },
   'iapp-tts':                 { cost: 0.0025, unit: 'per 400 chars' },
   'notion-api':               { cost: 0,      unit: 'free' },
 }

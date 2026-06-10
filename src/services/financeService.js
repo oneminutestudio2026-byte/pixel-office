@@ -12,6 +12,9 @@ const hdrs = () => ({
 // ── Category map ─────────────────────────────────────────────────
 const CATEGORY_MAP = {
   'claude-api':          'Claude API',
+  'anthropic-api':       'Claude API',
+  'deepseek-api':        'DeepSeek API',
+  'gemini-api':          'Gemini API',
   'fal-image':           'fal.ai Image',
   'fal-video-seedance-2':'fal.ai Video',
   'fal-video-wan-2.7':   'fal.ai Video',

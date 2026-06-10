@@ -101,8 +101,16 @@ export default function Character({ agent, state, isSelected, onClick, taskText,
 
       {/* Name badge */}
       <div
-        className="mt-1 px-2.5 py-0.5 rounded-full font-bold text-white shadow-md group-hover:scale-105 transition-transform"
-        style={{ background: agent.color, fontSize: '9px', letterSpacing: '0.04em' }}
+        className="mt-1 px-2.5 py-0.5 rounded-full font-bold text-white shadow-md transition-all duration-300"
+        style={{
+          background: agent.color,
+          fontSize: '9px',
+          letterSpacing: '0.04em',
+          boxShadow: isSelected ? `0 0 12px 3px ${agent.color}, 0 2px 4px rgba(0,0,0,0.3)` : '0 2px 4px rgba(0,0,0,0.15)',
+          border: isSelected ? '1px solid rgba(255,255,255,0.9)' : '1px solid transparent',
+          transform: isSelected ? 'scale(1.15)' : 'scale(1)',
+          textShadow: isSelected ? '0 0 4px rgba(255,255,255,0.6)' : 'none'
+        }}
       >
         {agent.name}
       </div>

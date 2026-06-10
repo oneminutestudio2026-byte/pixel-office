@@ -76,16 +76,6 @@ async function callProvider(agent, messages, systemPrompt, tools = null) {
 
   try {
     switch (provider) {
-      case 'openai': {
-        const apiKey = import.meta.env.VITE_OPENAI_API_KEY
-        if (!apiKey) throw new Error('กรุณาตั้งค่า VITE_OPENAI_API_KEY ใน .env')
-        const res = await callOpenAICompatible({
-          baseUrl: 'https://api.openai.com/v1',
-          apiKey, model, systemPrompt, messages,
-        })
-        return { ...res, actualModel: model, actualProvider: provider }
-      }
-
       case 'deepseek': {
         const apiKey = import.meta.env.VITE_DEEPSEEK_API_KEY
         if (!apiKey) throw new Error('กรุณาตั้งค่า VITE_DEEPSEEK_API_KEY ใน .env')
@@ -206,6 +196,17 @@ export async function evaluateVideoQuality({ modelName, prompt, videoUrl, succes
   }
 }
 
+// Programmatic Math Function helper for Bean CFO
+function safeEvalMath(expression) {
+  const sanitized = expression.replace(/[^0-9+\-*/().\s]/g, '')
+  try {
+    const result = new Function(`return (${sanitized})`)()
+    return typeof result === 'number' && !isNaN(result) ? result : 0
+  } catch (e) {
+    return 0
+  }
+}
+
 // ── Main: callAgent (public API) ─────────────────────────────────
 export async function callAgent(agent, history, extraSystemContext = '') {
   const messages = history.map(m => ({
@@ -237,5 +238,13 @@ export async function callAgent(agent, history, extraSystemContext = '') {
   const usd = calcTokenCost(usedModel, result.inputTokens, result.outputTokens)
   recordCost({ category: `${usedProvider}-api`, agentName: agent.name, description: usedModel, usd })
 
-  return result.text
+  let textResult = result.text
+  if (agent.id === 'bean' && typeof textResult === 'string') {
+    textResult = textResult.replace(/\[CALC:\s*([^\]]+)\]/g, (match, expr) => {
+      const val = safeEvalMath(expr)
+      return val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    })
+  }
+
+  return textResult
 }

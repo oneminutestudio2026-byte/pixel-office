@@ -152,17 +152,11 @@ export default function ChatPanel({ agentId, agentStates, messages, loadingHisto
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend() }
   }
 
-  async function handleClearClick() {
-    if (isBusy || clearing) return
-    const ok = window.confirm(`คุณต้องการล้างความจำประวัติทั้งหมดของ ${agent.name} ใน Notion หรือไม่?`)
+  function handleClearClick() {
+    if (isBusy) return
+    const ok = window.confirm(`คุณต้องการล้างข้อความบนหน้าจอแชทของ ${agent.name} หรือไม่? (ประวัติหลักใน Notion จะยังคงอยู่)`)
     if (!ok) return
-
-    setClearing(true)
-    try {
-      await onClearMemory(agentId)
-    } finally {
-      setClearing(false)
-    }
+    onClearMemory(agentId)
   }
 
   return (
