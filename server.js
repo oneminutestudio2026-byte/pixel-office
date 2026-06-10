@@ -1521,6 +1521,38 @@ async function handleTelegramUpdate(body) {
       backendApproveSessionTasks(sessionId).catch(err => {
         console.error('Failed to approve tasks in Notion:', err)
       })
+    } else if (data.startsWith('run_flow:')) {
+      const flowText = data.replace('run_flow:', '')
+      
+      try {
+        await fetch(`https://api.telegram.org/bot${token}/answerCallbackQuery`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            callback_query_id: callbackQuery.id,
+            text: '🚀 กำลังเริ่มโฟลว์งาน...'
+          })
+        })
+      } catch (e) {
+        console.error('Failed to answer callback query:', e)
+      }
+
+      await sendTelegramMessage(`⚙️ **[Ace (System)]** กำลังเริ่มรัน Flow งานตามที่คุณกดเลือก: \`${flowText}\`...`)
+      
+      let promptText = `รันงานตามโฟลว์: ${flowText}`
+      if (flowText === 'sparky,mei') {
+        promptText = 'ค้นหาข่าวการเงินและเทคโนโลยีล่าสุดรอบสัปดาห์ แล้วเขียนบทความตามโครงสร้างมาเสนอ'
+      } else if (flowText === 'sonic,nova') {
+        promptText = 'นำบทความล่าสุดที่ Mei เขียนไว้ ไปสร้างเสียงพากย์ด้วยไข่ต้ม V3 และทำไฟล์ซับไตเติล .srt'
+      } else if (flowText === 'bean') {
+        promptText = 'สรุปรายจ่ายและต้นทุน API วันนี้ให้หน่อย'
+      } else if (flowText === 'coco') {
+        promptText = 'ประเมินความเสี่ยงและสถานะพอร์ตการลงทุนปัจจุบันให้หน่อย'
+      }
+      
+      runTelegramSwarm(promptText).catch(err => {
+        console.error('[Telegram Button] Flow run failed:', err)
+      })
     }
     return 'OK'
   }
@@ -1670,6 +1702,12 @@ Return ONLY a JSON array, no markdown wrappers, no backticks, like:
   // 2. Handle Normal Text Swarm Commands
   const promptText = message.text
   if (promptText) {
+    const cleanPrompt = promptText.trim().toLowerCase()
+    if (cleanPrompt === '/menu' || cleanPrompt === 'menu' || cleanPrompt === '/start') {
+      await sendTelegramMenu()
+      return 'OK'
+    }
+
     console.log(`[Telegram] Received command: "${promptText}"`)
     runTelegramSwarm(promptText).catch(err => {
       console.error('[Telegram] Swarm run failed:', err)
@@ -1677,6 +1715,45 @@ Return ONLY a JSON array, no markdown wrappers, no backticks, like:
   }
 
   return 'OK'
+}
+
+async function sendTelegramMenu() {
+  const token = process.env.VITE_TELEGRAM_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN
+  const chatId = process.env.VITE_TELEGRAM_CHAT_ID || process.env.TELEGRAM_CHAT_ID
+  if (!token || !chatId) return
+
+  const text = `
+💼 **Pixel Office Swarm Portal**
+ยินดีต้อนรับคุณ J ครับ! เลือกกดปุ่มด้านล่างเพื่อสั่งงานทีมงานได้ทันทีโดยไม่ต้องพิมพ์คีย์เวิร์ดยาวๆ ค่ะ:
+`.trim()
+
+  try {
+    await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: text,
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            [
+              { text: '📰 1. คอนเทนต์ใหม่ (Sparky ➔ Mei)', callback_data: 'run_flow:sparky,mei' }
+            ],
+            [
+              { text: '🎧 2. พากย์เสียง & ซับ (Sonic ➔ Nova)', callback_data: 'run_flow:sonic,nova' }
+            ],
+            [
+              { text: '💰 3. ตรวจบัญชี (Bean)', callback_data: 'run_flow:bean' },
+              { text: '🔍 4. เช็คความเสี่ยง (Coco)', callback_data: 'run_flow:coco' }
+            ]
+          ]
+        }
+      })
+    })
+  } catch (err) {
+    console.error('Failed to send Telegram menu:', err)
+  }
 }
 
 app.post('/webhook/telegram', async (req, res) => {
