@@ -1485,17 +1485,18 @@ ${captions.hashtags || ''}
   }, 6000)
 }
 
-app.post('/webhook/telegram', async (req, res) => {
+// Helper to handle both Webhook and Long Polling payloads
+async function handleTelegramUpdate(body) {
   const token = process.env.VITE_TELEGRAM_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN
   const chatId = process.env.VITE_TELEGRAM_CHAT_ID || process.env.TELEGRAM_CHAT_ID
 
-  const callbackQuery = req.body?.callback_query
+  const callbackQuery = body?.callback_query
   if (callbackQuery) {
     const senderId = String(callbackQuery.from?.id)
     const allowedChatId = '8789851296'
     if (senderId !== allowedChatId) {
-      console.warn(`[Telegram Webhook] Unauthorized callback from chat ID ${senderId}`)
-      return res.status(200).send('Unauthorized')
+      console.warn(`[Telegram] Unauthorized callback from chat ID ${senderId}`)
+      return 'Unauthorized'
     }
 
     const data = callbackQuery.data || ''
@@ -1521,24 +1522,24 @@ app.post('/webhook/telegram', async (req, res) => {
         console.error('Failed to approve tasks in Notion:', err)
       })
     }
-    return res.status(200).send('OK')
+    return 'OK'
   }
 
-  const message = req.body?.message
+  const message = body?.message
   if (!message) {
-    return res.status(200).send('OK')
+    return 'OK'
   }
 
   const senderId = String(message.chat?.id)
   const allowedChatId = '8789851296'
   if (senderId !== allowedChatId) {
-    console.warn(`[Telegram Webhook] Unauthorized message from chat ID ${senderId} (Expected ${allowedChatId})`)
-    return res.status(200).send('Unauthorized')
+    console.warn(`[Telegram] Unauthorized message from chat ID ${senderId} (Expected ${allowedChatId})`)
+    return 'Unauthorized'
   }
 
   // 1. Handle Receipt Photo Uploads
   if (message.photo && message.photo.length > 0) {
-    console.log('[Telegram Webhook] Received photo. Running receipt billing extractor...')
+    console.log('[Telegram] Received photo. Running receipt billing extractor...')
 
     await sendTelegramMessage(`🐹 **[Bean CFO]** ได้รับรูปภาพบิล/ใบเสร็จแล้วค่ะ! กำลังสแกนตรวจสอบรายละเอียดและบันทึกบัญชีลงระบบ...`)
 
@@ -1663,20 +1664,71 @@ Return ONLY a JSON array, no markdown wrappers, no backticks, like:
       await sendTelegramMessage(`🐹 **[Bean CFO Error]** ไม่สามารถบันทึกค่าใช้จ่ายได้: ${err.message}`)
     }
 
-    return res.status(200).send('OK')
+    return 'OK'
   }
 
   // 2. Handle Normal Text Swarm Commands
   const promptText = message.text
   if (promptText) {
-    console.log(`[Telegram Webhook] Received command: "${promptText}"`)
+    console.log(`[Telegram] Received command: "${promptText}"`)
     runTelegramSwarm(promptText).catch(err => {
-      console.error('[Telegram Webhook] Swarm run failed:', err)
+      console.error('[Telegram] Swarm run failed:', err)
     })
   }
 
-  return res.status(200).send('OK')
+  return 'OK'
+}
+
+app.post('/webhook/telegram', async (req, res) => {
+  try {
+    const result = await handleTelegramUpdate(req.body)
+    return res.status(200).send(result)
+  } catch (err) {
+    console.error('[Telegram Webhook] Error:', err)
+    return res.status(200).send('Error')
+  }
 })
+
+// Telegram Long Polling Client (for local execution without public URL)
+let lastUpdateId = 0
+async function startTelegramPolling() {
+  const token = process.env.VITE_TELEGRAM_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN
+  if (!token) return
+
+  // Unregister webhook so Telegram will switch back to getUpdates long polling
+  try {
+    const unregisterRes = await fetch(`https://api.telegram.org/bot${token}/setWebhook?url=`)
+    const unregisterData = await unregisterRes.json()
+    console.log('[Telegram Polling] Unregistered webhook to enable long polling:', unregisterData)
+  } catch (err) {
+    console.error('[Telegram Polling] Failed to unregister webhook:', err)
+  }
+
+  console.log('[Telegram Polling] Long polling client started.')
+
+  async function poll() {
+    try {
+      const res = await fetch(`https://api.telegram.org/bot${token}/getUpdates?offset=${lastUpdateId + 1}&timeout=30`)
+      if (!res.ok) {
+        console.warn(`[Telegram Polling] Failed status ${res.status}, retrying in 5s...`)
+        setTimeout(poll, 5000)
+        return
+      }
+      const data = await res.json()
+      if (data.ok && data.result.length > 0) {
+        for (const update of data.result) {
+          lastUpdateId = update.update_id
+          await handleTelegramUpdate(update)
+        }
+      }
+      setTimeout(poll, 500)
+    } catch (err) {
+      console.error('[Telegram Polling] Error in polling loop, retrying in 5s:', err)
+      setTimeout(poll, 5000)
+    }
+  }
+  poll()
+}
 
 async function registerTelegramWebhook() {
   const token = process.env.VITE_TELEGRAM_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN
@@ -1684,8 +1736,14 @@ async function registerTelegramWebhook() {
   if (domain && domain.includes('4036')) {
     domain = domain.replace('4036', 'be99')
   }
-  if (!token || !domain) {
-    console.log('[Telegram Webhook] Skip auto-registration (missing token or domain)')
+  if (!token) {
+    console.log('[Telegram] Missing token. Skip webhook/polling setup.')
+    return
+  }
+
+  if (!domain) {
+    console.log('[Telegram] Running locally (no domain). Initializing Long Polling...')
+    await startTelegramPolling()
     return
   }
 
